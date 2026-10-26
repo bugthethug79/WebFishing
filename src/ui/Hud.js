@@ -11,6 +11,7 @@ export class Hud {
         <div class="hud-buttons">
           <button class="hud-btn" data-panel="bucket"><span class="hud-btn-icon">🪣</span><span class="hud-btn-text bucket-count"></span><kbd>B</kbd></button>
           <button class="hud-btn" data-panel="journal"><span class="hud-btn-icon">📖</span><span class="hud-btn-text journal-count"></span><kbd>J</kbd></button>
+          <button class="hud-btn icon-only" data-panel="pause" aria-label="Pause and settings"><span class="hud-btn-icon">⚙️</span></button>
         </div>
       `),
       el(`
@@ -18,6 +19,7 @@ export class Hud {
           <span><kbd>WASD</kbd>Move</span>
           <span><kbd>Shift</kbd>Run</span>
           <span><kbd>Space</kbd>/<kbd>Click</kbd>Fish</span>
+          <span><kbd>F</kbd>Interact</span>
           <span><kbd>Q</kbd><kbd>E</kbd>Rotate</span>
           <span><kbd>Scroll</kbd>Zoom</span>
         </div>
@@ -54,6 +56,10 @@ export class Hud {
     btn.classList.remove('bump');
     void btn.offsetWidth; // restart the animation
     btn.classList.add('bump');
+  }
+
+  setControlsVisible(visible) {
+    this.controls.style.display = visible ? '' : 'none';
   }
 
   update(dt, input) {

@@ -9,6 +9,7 @@ export class FishingUI {
     el.innerHTML = `
       <div class="anchor">
         <div class="power"><div class="power-fill"></div></div>
+        <div class="aim-label"></div>
         <div class="bite">!</div>
       </div>
       <div class="reel">
@@ -39,6 +40,7 @@ export class FishingUI {
     this.power = el.querySelector('.power');
     this.powerFill = el.querySelector('.power-fill');
     this.bite = el.querySelector('.bite');
+    this.aimLabel = el.querySelector('.aim-label');
     this.reel = el.querySelector('.reel');
     this.progressFill = el.querySelector('.progress .bar-fill');
     this.fishIcon = el.querySelector('.fish-icon');
@@ -60,6 +62,14 @@ export class FishingUI {
       this.powerFill.style.height = `${value * 100}%`;
       this.powerFill.style.background = `hsl(${120 - value * 110}, 85%, 55%)`;
     }
+  }
+
+  // Habitat name under the cursor while charging, or null to hide.
+  setAim(text, ok = true) {
+    this.aimLabel.classList.toggle('visible', text !== null);
+    if (text === null) return;
+    this.aimLabel.textContent = text;
+    this.aimLabel.classList.toggle('bad', !ok);
   }
 
   setBite(visible) {
@@ -104,6 +114,7 @@ export class FishingUI {
   toast(text, duration = 1800) {
     this.toastEl.textContent = text;
     this.toastEl.classList.add('visible');
+    this.onToast?.();
     clearTimeout(this.toastTimer);
     this.toastTimer = setTimeout(() => this.toastEl.classList.remove('visible'), duration);
   }

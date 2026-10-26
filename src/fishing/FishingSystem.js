@@ -13,6 +13,7 @@ import { createBobber } from './Bobber.js';
 import { FishingLine } from './FishingLine.js';
 import { Effects } from './Effects.js';
 import { rollFish, habitatForDepth } from '../collection/fishData.js';
+import { createAimMarker } from './AimMarker.js';
 import { createFishModel } from './fishModel.js';
 
 const TUNING = {
@@ -66,6 +67,11 @@ export class FishingSystem {
     this.onCatch = null;
     // Optional: returns a message to show when starting a cast (e.g. bucket full).
     this.castWarning = null;
+    // Optional: { play(name, opts, minGap) } for sound effects.
+    this.audio = null;
+
+    this.aim = createAimMarker();
+    scene.add(this.aim.object);
 
     this._tmp = new THREE.Vector3();
     this._screen = new THREE.Vector3();
@@ -73,6 +79,10 @@ export class FishingSystem {
 
   get isFishing() {
     return this.state !== 'idle';
+  }
+
+  sfx(name, opts, minGap) {
+    this.audio?.play(name, opts, minGap);
   }
 
   setState(state) {
@@ -120,19 +130,35 @@ export class FishingSystem {
       this.powerDir = 1;
     }
     this.ui.setPower(this.power);
+    this.updateAim();
 
     if (input.actionReleased) {
       this.ui.setPower(null);
+      this.ui.setAim(null);
+      this.aim.hide();
       this.startCast();
     }
   }
 
-  startCast() {
+  // Where a cast at the current power would land.
+  castTarget() {
     const { x: fx, z: fz } = this.player.forward;
     const dist = lerp(TUNING.minCast, TUNING.maxCast, this.power);
     const p = this.player.position;
-    const tx = p.x + fx * dist;
-    const tz = p.z + fz * dist;
+    return { x: p.x + fx * dist, z: p.z + fz * dist };
+  }
+
+  updateAim() {
+    const { x, z } = this.castTarget();
+    const ok = this.isFishableWater(x, z);
+    const y = ok ? WORLD.waterLevel + waveHeight(x, z, this.time) : (this.world.getWalkHeight(x, z) ?? groundHeight(x, z));
+    this.aim.show(x, y + 0.05, z, ok, this.time);
+    const depth = WORLD.waterLevel - groundHeight(x, z);
+    this.ui.setAim(ok ? habitatForDepth(depth).label : 'Land', ok);
+  }
+
+  startCast() {
+    const { x: tx, z: tz } = this.castTarget();
 
     this.castValid = this.isFishableWater(tx, tz);
     const ty = this.castValid ? WORLD.waterLevel : (this.world.getWalkHeight(tx, tz) ?? groundHeight(tx, tz));
@@ -140,6 +166,7 @@ export class FishingSystem {
     this.castTo.set(tx, ty, tz);
     this.flightTime = 0.45 + this.power * 0.35;
     this.arcHeight = 1.5 + this.power * 2.5;
+    this.sfx('cast');
     this.setState('casting');
   }
 
@@ -156,8 +183,10 @@ export class FishingSystem {
     if (this.castValid) {
       this.effects.splash(x, WORLD.waterLevel, z, 10, 0.8);
       this.effects.ripple(x, z, 1.2);
+      this.sfx('plop');
       this.startWaiting();
     } else {
+      this.sfx('step', { surface: 'sand' });
       this.ui.toast('Cast into the water!');
       this.startRetrieve(0.5);
     }
@@ -178,6 +207,7 @@ export class FishingSystem {
     if (this.nibbles.length && this.stateTime >= this.nibbles[0]) {
       this.nibbles.shift();
       this.nibbleTimer = 0.3;
+      this.sfx('nibble');
       this.effects.ripple(this.bobber.position.x, this.bobber.position.z, 0.6, 0.8);
     }
     this.nibbleTimer -= dt;
@@ -185,7 +215,10 @@ export class FishingSystem {
     this.floatBobber(dt, this.castTo.x, this.castTo.z);
 
     if (input.actionPressed || this.moveRequested(input)) {
-      if (this.nibbleTimer > 0) this.ui.toast('Too early! It swam off.');
+      if (this.nibbleTimer > 0) {
+        this.ui.toast('Too early! It swam off.');
+        this.sfx('escape');
+      }
       this.startRetrieve();
       return;
     }
@@ -195,6 +228,8 @@ export class FishingSystem {
       this.effects.splash(x, WORLD.waterLevel, z, 8, 0.7);
       this.effects.ripple(x, z, 1.6);
       this.ui.setBite(true);
+      this.sfx('bite');
+      this.sfx('splash', { size: 0.6 });
       this.setState('bite');
     }
   }
@@ -210,6 +245,7 @@ export class FishingSystem {
     } else if (this.stateTime >= TUNING.biteWindow || this.moveRequested(input)) {
       this.ui.setBite(false);
       this.ui.toast('It got away...');
+      this.sfx('escape');
       this.startRetrieve();
     }
   }
@@ -228,6 +264,7 @@ export class FishingSystem {
       splashTimer: 0,
     };
     this.effects.splash(x, WORLD.waterLevel, z, 12, 1);
+    this.sfx('hook');
     this.setState('reeling');
   }
 
@@ -246,6 +283,7 @@ export class FishingSystem {
     }
 
     if (reeling) {
+      this.sfx('reelTick', { tension: r.tension }, 0.075);
       r.tension += (R.tensionUp + (r.thrashing ? R.tensionThrash * strength : 0)) * dt;
       if (r.tension < R.dangerZone) r.progress += R.gain * (1 - strength * 0.5) * dt;
     } else {
@@ -281,6 +319,7 @@ export class FishingSystem {
       r.splashTimer = 0.22;
       this.effects.splash(this.castTo.x, WORLD.waterLevel, this.castTo.z, 4, 0.6);
       this.effects.ripple(this.castTo.x, this.castTo.z, 0.8, 0.7);
+      this.sfx('splash', { size: 0.45 }, 0.2);
     }
 
     if (r.progress >= 1) {
@@ -288,7 +327,9 @@ export class FishingSystem {
       this.startCaught();
     } else if (r.progress <= 0 || r.snap >= R.snapTime) {
       this.ui.setReel(null);
-      this.ui.toast(r.snap >= R.snapTime ? 'Snap! The line broke.' : 'It got away...');
+      const snapped = r.snap >= R.snapTime;
+      this.ui.toast(snapped ? 'Snap! The line broke.' : 'It got away...');
+      this.sfx(snapped ? 'snap' : 'escape');
       this.startRetrieve();
     }
   }
@@ -303,6 +344,7 @@ export class FishingSystem {
     this.fishFrom = new THREE.Vector3(x, WORLD.waterLevel, z);
     this.cardShown = false;
     this.catchResult = this.onCatch?.(this.catch) ?? {};
+    this.sfx('catch', { legendary: this.catch.rarity.id === 'legendary' });
     this.setState('caught');
   }
 
@@ -325,6 +367,7 @@ export class FishingSystem {
     if (t >= 1 && !this.cardShown) {
       this.cardShown = true;
       this.ui.showCatch(this.catch, this.catchResult);
+      if (this.catchResult.isNew || this.catchResult.isRecord) this.sfx('sparkle');
     }
     const canDismiss = this.cardShown && this.stateTime > 1.2;
     if ((canDismiss && input.actionPressed) || this.stateTime > 6) {
@@ -339,6 +382,7 @@ export class FishingSystem {
     this.retrieveDelay = delay;
     this.retrieveFrom.copy(this.bobber.position);
     this.dipTarget = 0;
+    this.sfx('retrieve');
     this.setState('retrieving');
   }
 
@@ -402,11 +446,17 @@ export class FishingSystem {
     this.ui.setAnchor((s.x * 0.5 + 0.5) * window.innerWidth, (-s.y * 0.5 + 0.5) * window.innerHeight);
   }
 
-  // Where the camera should look: drift toward the bobber while it's out.
+  // Where the camera should look: halfway to the aim point / bobber, so both stay on screen
+  // even when casting toward the camera (the tilted view has less room below the player).
   getCameraFocus(out) {
     out.copy(this.player.position);
-    if (['casting', 'waiting', 'bite', 'reeling'].includes(this.state)) {
-      out.lerp(this.bobber.position, 0.3);
+    if (this.state === 'charging') {
+      // Frame the whole possible cast range, so the view stays still while the power meter swings.
+      const f = this.player.forward;
+      out.x += f.x * TUNING.maxCast * 0.5;
+      out.z += f.z * TUNING.maxCast * 0.5;
+    } else if (['casting', 'waiting', 'bite', 'reeling'].includes(this.state)) {
+      out.lerp(this.bobber.position, 0.5);
       out.y = this.player.position.y;
     }
     return out;

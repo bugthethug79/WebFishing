@@ -35,14 +35,19 @@ Each milestone should leave the game in a playable, polished state.
 - [x] HUD buttons (B / J), menus pause gameplay and only open between casts
 - [ ] Time-of-day / weather conditions for fish (needs the day/night cycle, Milestone 6)
 
-## Milestone 4: UI & feel
-- [ ] Proper HUD (money, bait, current zone)
-- [ ] Pause / settings menu
-- [ ] Interaction prompts ("E to talk", "E to sell")
-- [ ] Sound effects + ambient audio (waves, birds), music
+## ✅ Milestone 4: UI & feel (done)
+- [x] Title screen ("click to start", also unlocks audio) with a slow camera orbit
+- [x] Area banner on arrival ("Sunny Isle")
+- [x] Pause / settings menu (Esc or ⚙️): volume sliders, shadows, resolution, controls hint; settings saved
+- [x] Interaction system: "F" prompt bubbles + typewriter dialogue box; signpost with tips, locked hut door
+- [x] Aim marker + habitat label while charging a cast; camera frames the cast range
+- [x] All audio synthesised in code (no files): fishing SFX, footsteps per surface, UI sounds
+- [x] Ambience: waves that swell louder near the shore, birdsong inland
+- [x] Procedural lo-fi music loop
 
 ## Milestone 5: Economy & progression
-- [ ] Sell fish at the hut
+- [ ] HUD money + bait display
+- [ ] Sell fish at the hut (Marina the shopkeeper)
 - [ ] Shop: rods, bait, cosmetics (hats!)
 - [ ] Rod stats that affect the minigame
 
@@ -58,7 +63,7 @@ Each milestone should leave the game in a playable, polished state.
 
 ## Milestone 8: Persistence
 - [ ] Save / load (localStorage)
-- [ ] Settings persistence
+- [x] Settings persistence (done early in Milestone 4)
 
 ## Later / maybe
 - [ ] Multiplayer

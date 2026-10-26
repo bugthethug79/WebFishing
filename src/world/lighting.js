@@ -22,6 +22,7 @@ export function createLighting(scene) {
   scene.fog = new THREE.Fog(PALETTE.fog, 55, 130);
 
   return {
+    sun,
     // Keep the shadow frustum centred on whatever we're looking at.
     follow(target) {
       sun.position.copy(target).add(sunOffset);

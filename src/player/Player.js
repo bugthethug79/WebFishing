@@ -40,6 +40,8 @@ export class Player {
     this.canMove = true;
     this.canTurn = true;
     this.armAngles = { right: POSES.idle.right, left: 0 };
+    this.onStep = null; // called with no args on each footfall
+    this.lastStepPhase = 0;
   }
 
   get position() {
@@ -116,6 +118,13 @@ export class Player {
 
     legs[0].rotation.x = swing;
     legs[1].rotation.x = -swing;
+
+    // A foot lands every half walk cycle.
+    const phase = Math.floor(this.walkCycle / Math.PI);
+    if (phase !== this.lastStepPhase) {
+      this.lastStepPhase = phase;
+      if (moveAmount > 0.3) this.onStep?.();
+    }
 
     // Arms blend toward the current pose; the cast swing is snappy, the rest gentle.
     const pose = POSES[this.pose] ?? POSES.idle;

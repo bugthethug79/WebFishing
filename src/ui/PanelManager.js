@@ -10,6 +10,8 @@ export class PanelManager {
     root.appendChild(this.overlay);
     this.panels = {};
     this.current = null;
+    this.onOpen = null;
+    this.onClose = null;
   }
 
   register(name, panel) {
@@ -29,6 +31,7 @@ export class PanelManager {
     this.panels[name].render();
     this.panels[name].el.classList.add('visible');
     this.overlay.classList.add('visible');
+    this.onOpen?.(name);
   }
 
   close() {
@@ -37,6 +40,7 @@ export class PanelManager {
     this.overlay.classList.remove('visible');
     this.current = null;
     document.activeElement?.blur?.(); // keep Space for casting, not for focused panel buttons
+    this.onClose?.();
   }
 
   toggle(name) {

@@ -13,8 +13,11 @@ import { createHut } from './props/hut.js';
 import { createRoundTree, createPalm } from './props/trees.js';
 import { createRock } from './props/rocks.js';
 import { createFlower, createTuft } from './props/decor.js';
+import { createSignpost } from './props/signpost.js';
 
 // Hand-tuned anchor points, in island polar coordinates (angle, distance inland).
+export const ZONE = { name: 'Sunny Isle', subtitle: 'A quiet little island' };
+
 const LAYOUT = {
   dockAngle: Math.PI / 2 + 0.35, // south side, facing the default camera
   dockInland: 2.8,
@@ -33,6 +36,9 @@ export class World {
     this.rng = createRng(WORLD.seed + 1);
     this.colliders = new Colliders();
     this.blockers = []; // {x, z, r} areas props shouldn't spawn in
+    // Things the player can walk up to and press F on: { x, z, y, radius, verb, dialog }.
+    this.interactables = [];
+    this.zone = ZONE;
 
     // Order matters: flatten zones must exist before the terrain mesh is built.
     this.placeHut();
@@ -40,6 +46,7 @@ export class World {
     this.water = createWater();
     this.root.add(this.water.group);
     this.placeDock();
+    this.placeSignpost();
     this.placeSpawn();
     this.scatterProps();
   }
@@ -79,11 +86,70 @@ export class World {
     hut.object.rotation.y = facing;
     this.root.add(hut.object);
 
+    // The (locked) front door, until the shop opens in Milestone 5.
+    const front = 3.3;
+    this.interactables.push({
+      x: p.x + Math.sin(facing) * front,
+      z: p.z + Math.cos(facing) * front,
+      y: h + 2.8,
+      radius: 2,
+      verb: 'Knock',
+      dialog: {
+        name: 'Fishing Hut',
+        pages: [
+          'Knock knock... nobody answers. There\'s a note pinned to the door:',
+          '"Gone fishing! The shop will open soon. Bring me your best catches!" — Marina',
+        ],
+      },
+    });
+
     // Box collider shifted to match the porch offset.
     const ox = Math.sin(facing) * hut.offsetZ;
     const oz = Math.cos(facing) * hut.offsetZ;
     this.colliders.addBox(p.x + ox, p.z + oz, hut.halfW, hut.halfD, facing);
     this.blockers.push({ x: p.x, z: p.z, r: 5 });
+  }
+
+  placeSignpost() {
+    const p = this.dockToWorld(-1.4, 2.7);
+    const sign = createSignpost(ZONE.name);
+    const y = groundHeight(p.x, p.z);
+    sign.position.set(p.x, y, p.z);
+    // Face the board out to sea, which is toward the default camera.
+    sign.rotation.y = Math.atan2(this.dock.dirX, this.dock.dirZ);
+    this.root.add(sign);
+    this.colliders.addCircle(p.x, p.z, 0.3);
+    this.blockers.push({ x: p.x, z: p.z, r: 1.5 });
+    this.interactables.push({
+      x: p.x,
+      z: p.z,
+      y: y + 2.4,
+      radius: 1.8,
+      verb: 'Read',
+      dialog: {
+        name: 'Signpost',
+        pages: [
+          `Welcome to ${ZONE.name}! 🌴`,
+          'Hold Space or click to charge a cast, then let go. The marker shows where your bobber will land.',
+          'Deeper water hides rarer fish. Try casting from the end of the dock!',
+          'When the bobber dips and a "!" pops up, press Space to hook. Hold to reel, but ease off when the line gets tight.',
+          'Open your Journal (J) to see which fish are still out there. Happy fishing!',
+        ],
+      },
+    });
+  }
+
+  nearestInteractable(x, z) {
+    let best = null;
+    let bestD = Infinity;
+    for (const it of this.interactables) {
+      const d = Math.hypot(x - it.x, z - it.z);
+      if (d < it.radius && d < bestD) {
+        best = it;
+        bestD = d;
+      }
+    }
+    return best;
   }
 
   placeSpawn() {
