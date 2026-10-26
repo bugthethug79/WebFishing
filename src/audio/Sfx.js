@@ -82,6 +82,26 @@ const SOUNDS = {
     a.tone(660, { dur: 0.07, gain: 0.08 });
     a.tone(990, { at: a.now + 0.06, dur: 0.1, gain: 0.08 });
   },
+  coins(a, { count = 1 } = {}) {
+    const n = Math.min(6, 1 + count);
+    for (let i = 0; i < n; i++) {
+      const at = a.now + i * 0.07;
+      a.tone(midi(88 + (i % 2) * 3), { at, dur: 0.18, type: 'square', gain: 0.04, filter: 4000 });
+      a.tone(midi(95 + (i % 2) * 3), { at: at + 0.03, dur: 0.25, gain: 0.06 });
+    }
+  },
+  buy(a) {
+    [79, 84, 88].forEach((n, i) => a.tone(midi(n), { at: a.now + i * 0.08, dur: 0.3, type: 'triangle', gain: 0.14 }));
+    SOUNDS.sparkle(a);
+  },
+  equip(a) {
+    a.tone(600, { dur: 0.06, type: 'triangle', gain: 0.1 });
+    a.tone(900, { at: a.now + 0.05, dur: 0.12, type: 'triangle', gain: 0.1 });
+  },
+  error(a) {
+    a.tone(220, { dur: 0.12, type: 'square', gain: 0.06, filter: 1200 });
+    a.tone(180, { at: a.now + 0.12, dur: 0.18, type: 'square', gain: 0.06, filter: 1200 });
+  },
   talk(a) {
     a.tone(400 + Math.random() * 200, { dur: 0.04, type: 'triangle', gain: 0.05 });
   },

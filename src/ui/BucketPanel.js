@@ -5,8 +5,9 @@ import { getFishIcon } from './fishIcons.js';
 import { el, timeAgo } from './format.js';
 
 export class BucketPanel {
-  constructor(inventory, onToast) {
+  constructor(inventory, onToast, priceOf) {
     this.inventory = inventory;
+    this.priceOf = priceOf;
     this.onToast = onToast;
     this.selected = null;
     this.el = el(`
@@ -69,6 +70,7 @@ export class BucketPanel {
             <dt>Length</dt><dd>${item.size} cm</dd>
             <dt>Weight</dt><dd>${formatWeight(item.weight)}</dd>
             <dt>Caught</dt><dd>${timeAgo(item.caughtAt)}</dd>
+            <dt>Worth</dt><dd>🪙 ${this.priceOf(item)}</dd>
           </dl>
           <button class="btn release">Release 🌊</button>
         </div>

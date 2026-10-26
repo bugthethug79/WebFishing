@@ -541,3 +541,119 @@ kbd {
 #hud.pre-start .hud-title,
 #hud.dialog-open .hud-controls { opacity: 0; pointer-events: none; }
 .hud-title, .hud-buttons { transition: opacity 0.6s; }
+
+/* ---------- Milestone 5: wallet, shop ---------- */
+
+.hud-left { position: absolute; top: 18px; left: 20px; display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
+.hud-left .hud-title { position: static; }
+.hud-wallet { display: flex; gap: 8px; transition: opacity 0.6s; }
+#hud.pre-start .hud-wallet { opacity: 0; pointer-events: none; }
+
+.chip {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px 5px 8px;
+  border: none;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.88);
+  color: #2b6f8a;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  box-shadow: 0 4px 0 rgba(43, 111, 138, 0.25);
+}
+.chip-icon { font-size: 18px; }
+.chip.bait { cursor: pointer; pointer-events: auto; }
+.chip.bait kbd { font-size: 11px; background: #e3f3f7; box-shadow: none; }
+.chip.bump { animation: bump 0.4s ease-out; }
+.money-float {
+  position: absolute;
+  left: 100%;
+  top: 4px;
+  margin-left: 8px;
+  color: #3ccf8e;
+  font-size: 18px;
+  font-weight: 700;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.15);
+  white-space: nowrap;
+  animation: money-float 1.2s ease-out forwards;
+}
+.money-float.neg { color: #ff7a6b; }
+@keyframes money-float { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(-26px); } }
+
+.shop-panel { width: min(860px, 100%); }
+.shop-money { margin-left: auto; box-shadow: none; }
+.shop-money + .panel-close { margin-left: 0; }
+.tabs { display: flex; gap: 6px; padding: 12px 16px 0; }
+.tab {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 14px 14px 0 0;
+  background: #e3f3f7;
+  color: #2b6f8a;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.tab.active { background: #fff; box-shadow: 0 -3px 0 #4fc3d6 inset; }
+.shop-body { min-height: 360px; background: #fff; margin: 0 16px; border-radius: 0 16px 16px 16px; }
+.shop-body.tab-rods,
+.shop-body.tab-bait { flex-direction: column; gap: 10px; overflow-y: auto; }
+.shop-body .detail { box-shadow: none; background: #f6fbfc; }
+.shop-empty { margin: auto; text-align: center; font-size: 16px; opacity: 0.7; line-height: 1.6; }
+
+.shop-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 14px;
+  border: 3px solid transparent;
+  border-radius: 16px;
+  background: #f6fbfc;
+}
+.shop-card.equipped { border-color: #4fc3d6; }
+.shop-card-icon { width: 76px; height: 76px; flex-shrink: 0; }
+.shop-card-icon.emoji { display: grid; place-items: center; font-size: 42px; }
+.shop-card-info { flex: 1; min-width: 0; }
+.shop-card-name { font-size: 18px; font-weight: 700; }
+.shop-card-desc { font-size: 13px; opacity: 0.75; }
+.shop-card-actions { display: flex; flex-direction: column; gap: 4px; }
+.shop-card .btn, .hat-card .btn { margin-top: 0; white-space: nowrap; }
+.owned-count { font-size: 14px; opacity: 0.6; }
+
+.stat-bars { display: grid; grid-template-columns: auto 1fr auto 1fr; gap: 3px 10px; align-items: center; margin-top: 6px; max-width: 360px; }
+.stat-label { font-size: 12px; font-weight: 600; opacity: 0.7; }
+.stat-bar { height: 8px; border-radius: 4px; background: #dcecf0; overflow: hidden; }
+.stat-bar span { display: block; height: 100%; border-radius: 4px; background: linear-gradient(90deg, #4fc3d6, #3ccf8e); }
+
+.hat-grid { flex: 1; display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 12px; align-content: start; overflow-y: auto; }
+.hat-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 12px;
+  border: 3px solid transparent;
+  border-radius: 16px;
+  background: #f6fbfc;
+  text-align: center;
+}
+.hat-card.equipped { border-color: #4fc3d6; }
+.hat-card img { width: 84px; height: 84px; }
+.hat-card .shop-card-name { font-size: 15px; line-height: 1.15; }
+.hat-card .shop-card-desc { flex: 1; margin-bottom: 6px; }
+
+.btn.secondary { background: #fff; color: #2b6f8a; box-shadow: 0 4px 0 #cfe6ec, inset 0 0 0 2px #cfe6ec; }
+.btn.equipped-btn { background: #3ccf8e; box-shadow: 0 4px 0 #2a9f6a; cursor: default; }
+.btn.cant-afford { background: #c9d6da; box-shadow: 0 4px 0 #a9b9be; }
+.btn:disabled { opacity: 0.5; cursor: default; }
+.detail .btn { width: 100%; }
+
+@media (max-width: 640px) {
+  .stat-bars { grid-template-columns: auto 1fr; }
+  .shop-card { flex-wrap: wrap; }
+  .tab { padding: 6px 10px; font-size: 13px; }
+}

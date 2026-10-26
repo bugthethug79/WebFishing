@@ -20,6 +20,7 @@ npm run build    # production build into dist/
 | Shift | Run |
 | Space / Left click | Hold to charge a cast, release to throw. Press on a bite to hook, hold to reel |
 | F | Interact (signs, doors) |
+| R | Switch bait |
 | B | Open bucket |
 | J | Open journal |
 | Esc | Pause / settings, or close a menu |
@@ -36,6 +37,8 @@ src/
   core/              input, settings, math helpers, event emitter
   audio/             synthesised sound: engine/mixer, sfx, ambience, music
   collection/        fish species data, bucket (inventory), journal
+  economy/           rods/bait/hats, prices, player money + gear, shop transactions
+  npc/               NPC behaviour (Marina)
   camera/            top-down follow camera
   player/            player model + controller
   fishing/           fishing state machine, rod, bobber, line, effects, placeholder fish

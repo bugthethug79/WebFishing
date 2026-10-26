@@ -69,6 +69,11 @@ export class FishingSystem {
     this.castWarning = null;
     // Optional: { play(name, opts, minGap) } for sound effects.
     this.audio = null;
+    // Set by the game: current gear. rod = { cast, reel, tension, luck }, bait = { bite, rare, legendary }.
+    this.getRod = () => ({ cast: TUNING.maxCast, reel: 1, tension: 1, luck: 0 });
+    // Set by the game: consumes one bait when a cast lands, returns the bait used.
+    this.useBait = () => ({ bite: 1, rare: 0, legendary: 0 });
+    this.bait = { bite: 1, rare: 0, legendary: 0 };
 
     this.aim = createAimMarker();
     scene.add(this.aim.object);
@@ -143,7 +148,7 @@ export class FishingSystem {
   // Where a cast at the current power would land.
   castTarget() {
     const { x: fx, z: fz } = this.player.forward;
-    const dist = lerp(TUNING.minCast, TUNING.maxCast, this.power);
+    const dist = lerp(TUNING.minCast, this.getRod().cast, this.power);
     const p = this.player.position;
     return { x: p.x + fx * dist, z: p.z + fz * dist };
   }
@@ -193,7 +198,8 @@ export class FishingSystem {
   }
 
   startWaiting() {
-    this.biteAt = lerp(TUNING.waitTime[0], TUNING.waitTime[1], Math.random());
+    this.bait = this.useBait();
+    this.biteAt = lerp(TUNING.waitTime[0], TUNING.waitTime[1], Math.random()) * this.bait.bite;
     // A few nibbles before the real bite keep you watching the bobber.
     const count = Math.floor(Math.random() * 4);
     this.nibbles = Array.from({ length: count }, () => lerp(0.8, this.biteAt - 0.5, Math.random())).sort((a, b) => a - b);
@@ -253,7 +259,11 @@ export class FishingSystem {
   startReeling() {
     const { x, z } = this.castTo;
     const depth = Math.max(0, WORLD.waterLevel - groundHeight(x, z));
-    this.catch = rollFish(habitatForDepth(depth), clamp((depth - 1.5) / 1.5, 0, 1));
+    const depthBonus = clamp((depth - 1.5) / 1.5, 0, 1);
+    this.catch = rollFish(habitatForDepth(depth), {
+      rareBoost: depthBonus + this.getRod().luck + this.bait.rare,
+      legendaryBoost: this.bait.legendary,
+    });
     this.hookPoint.set(x, WORLD.waterLevel, z);
     this.reel = {
       progress: TUNING.reel.startProgress,
@@ -272,6 +282,7 @@ export class FishingSystem {
     const R = TUNING.reel;
     const r = this.reel;
     const strength = this.catch.species.strength;
+    const rod = this.getRod();
     const reeling = input.actionDown;
     this.player.pose = reeling ? 'reel' : 'hold';
 
@@ -284,8 +295,8 @@ export class FishingSystem {
 
     if (reeling) {
       this.sfx('reelTick', { tension: r.tension }, 0.075);
-      r.tension += (R.tensionUp + (r.thrashing ? R.tensionThrash * strength : 0)) * dt;
-      if (r.tension < R.dangerZone) r.progress += R.gain * (1 - strength * 0.5) * dt;
+      r.tension += (R.tensionUp + (r.thrashing ? R.tensionThrash * strength : 0)) * rod.tension * dt;
+      if (r.tension < R.dangerZone) r.progress += R.gain * rod.reel * (1 - strength * 0.5) * dt;
     } else {
       r.tension -= R.tensionDown * dt;
       r.progress -= R.slip * (0.5 + strength) * dt;
@@ -453,8 +464,8 @@ export class FishingSystem {
     if (this.state === 'charging') {
       // Frame the whole possible cast range, so the view stays still while the power meter swings.
       const f = this.player.forward;
-      out.x += f.x * TUNING.maxCast * 0.5;
-      out.z += f.z * TUNING.maxCast * 0.5;
+      out.x += f.x * this.getRod().cast * 0.5;
+      out.z += f.z * this.getRod().cast * 0.5;
     } else if (['casting', 'waiting', 'bite', 'reeling'].includes(this.state)) {
       out.lerp(this.bobber.position, 0.5);
       out.y = this.player.position.y;

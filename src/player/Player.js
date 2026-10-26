@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { PLAYER } from '../config.js';
 import { damp, angleDelta, lerp } from '../core/math.js';
-import { createPlayerModel } from './playerModel.js';
+import { createCharacterModel, setHat } from './characterModel.js';
 import { createRod } from '../fishing/Rod.js';
 
 // Target shoulder angles (rotation.x) for each pose. Negative swings the arm forward;
@@ -20,15 +20,12 @@ const POSES = {
 export class Player {
   constructor(scene, world, spawn) {
     this.world = world;
-    this.model = createPlayerModel();
+    this.model = createCharacterModel();
     this.object = this.model.root;
     this.object.position.copy(spawn);
     scene.add(this.object);
 
-    // The rod lives in the right hand (arms[0] is the character's right).
-    this.rod = createRod();
-    this.rod.object.position.y = -0.44;
-    this.model.arms[0].add(this.rod.object);
+    this.setRod();
 
     this.velocity = new THREE.Vector2();
     this.facing = 0; // facing the camera on spawn
@@ -42,6 +39,18 @@ export class Player {
     this.armAngles = { right: POSES.idle.right, left: 0 };
     this.onStep = null; // called with no args on each footfall
     this.lastStepPhase = 0;
+  }
+
+  // The rod lives in the right hand (arms[0] is the character's right).
+  setRod(def) {
+    if (this.rod) this.model.arms[0].remove(this.rod.object);
+    this.rod = createRod(def);
+    this.rod.object.position.y = -0.44;
+    this.model.arms[0].add(this.rod.object);
+  }
+
+  setHat(id) {
+    setHat(this.model, id);
   }
 
   get position() {

@@ -14,6 +14,7 @@ import { createRoundTree, createPalm } from './props/trees.js';
 import { createRock } from './props/rocks.js';
 import { createFlower, createTuft } from './props/decor.js';
 import { createSignpost } from './props/signpost.js';
+import { Npc } from '../npc/Npc.js';
 
 // Hand-tuned anchor points, in island polar coordinates (angle, distance inland).
 export const ZONE = { name: 'Sunny Isle', subtitle: 'A quiet little island' };
@@ -38,6 +39,7 @@ export class World {
     this.blockers = []; // {x, z, r} areas props shouldn't spawn in
     // Things the player can walk up to and press F on: { x, z, y, radius, verb, dialog }.
     this.interactables = [];
+    this.npcs = [];
     this.zone = ZONE;
 
     // Order matters: flatten zones must exist before the terrain mesh is built.
@@ -86,21 +88,29 @@ export class World {
     hut.object.rotation.y = facing;
     this.root.add(hut.object);
 
-    // The (locked) front door, until the shop opens in Milestone 5.
-    const front = 3.3;
+    // Marina the shopkeeper stands on the porch.
+    const marina = new Npc({
+      skin: 0xc98f6b,
+      shirt: 0xfff4e0,
+      stripe: 0xff8fb1,
+      jacket: 0x3fbfa0,
+      pants: 0x6b4f8f,
+      shoes: 0x8a5a3b,
+      hair: 0x5a3322,
+      hat: 'straw',
+    });
+    marina.object.position.set(0.3, 0.3, 2.5); // front edge of the porch, clear of the roof
+    hut.object.add(marina.object);
+    this.npcs.push(marina);
+
+    const front = 3.6;
     this.interactables.push({
       x: p.x + Math.sin(facing) * front,
       z: p.z + Math.cos(facing) * front,
-      y: h + 2.8,
-      radius: 2,
-      verb: 'Knock',
-      dialog: {
-        name: 'Fishing Hut',
-        pages: [
-          'Knock knock... nobody answers. There\'s a note pinned to the door:',
-          '"Gone fishing! The shop will open soon. Bring me your best catches!" — Marina',
-        ],
-      },
+      y: h + 2.9,
+      radius: 2.8,
+      verb: 'Talk',
+      npc: 'marina', // the game opens Marina's dialogue + shop
     });
 
     // Box collider shifted to match the porch offset.
@@ -242,7 +252,8 @@ export class World {
     return h > WORLD.waterLevel + 0.06 ? h : null;
   }
 
-  update(time) {
+  update(time, dt, playerPos) {
     this.water.update(time);
+    for (const npc of this.npcs) npc.update(dt, playerPos);
   }
 }

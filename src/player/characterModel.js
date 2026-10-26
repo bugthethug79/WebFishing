@@ -1,22 +1,25 @@
-// Chibi low-poly fisher built from primitives: big head, bucket hat, striped shirt.
+// Chibi low-poly character built from primitives: big head, hat, striped shirt.
+// Used for the player and NPCs; `look` overrides colours, hat and hair.
 // Returns the group plus named joints the animator can swing.
 
 import * as THREE from 'three';
 import { flatMat, part } from '../world/props/materials.js';
+import { buildHat } from './hats.js';
 
-const COLORS = {
+const DEFAULT_LOOK = {
   skin: 0xf2b48a,
-  hat: 0xffcc3d,
-  hatBand: 0xe0a21f,
   shirt: 0xffffff,
   stripe: 0x3a4a78,
   jacket: 0xff9a3c,
   pants: 0x3f66b8,
   shoes: 0x5a3b2a,
   eyes: 0x2a2a35,
+  hair: null, // colour, or null for none (hidden under the hat)
+  hat: 'bucket',
 };
 
-export function createPlayerModel() {
+export function createCharacterModel(look = {}) {
+  const COLORS = { ...DEFAULT_LOOK, ...look };
   const root = new THREE.Group();
   const body = new THREE.Group(); // bobs while walking
   root.add(body);
@@ -83,10 +86,25 @@ export function createPlayerModel() {
   mouth.rotation.z = Math.PI;
   head.add(mouth);
 
-  // Bucket hat.
-  head.add(part(new THREE.CylinderGeometry(0.3, 0.36, 0.26, 8), flatMat(COLORS.hat), 0, 0.6, 0));
-  head.add(part(new THREE.CylinderGeometry(0.37, 0.37, 0.05, 8), flatMat(COLORS.hatBand), 0, 0.5, 0));
-  head.add(part(new THREE.CylinderGeometry(0.55, 0.58, 0.05, 10), flatMat(COLORS.hat), 0, 0.47, 0));
+  // Optional hair: a cap over the back of the head plus a ponytail.
+  if (COLORS.hair !== null) {
+    const hairMat = flatMat(COLORS.hair);
+    const cap = new THREE.SphereGeometry(0.38, 8, 5, 0, Math.PI * 2, 0, Math.PI * 0.55);
+    const capMesh = part(cap, hairMat, 0, 0.3, -0.03);
+    capMesh.rotation.x = -0.35;
+    head.add(capMesh);
+    head.add(part(new THREE.IcosahedronGeometry(0.14, 0), hairMat, 0, 0.22, -0.4));
+  }
 
-  return { root, body, torso, head, legs, arms };
+  // Hats live in a slot so they can be swapped at runtime.
+  const hatSlot = new THREE.Group();
+  head.add(hatSlot);
+  const model = { root, body, torso, head, legs, arms, hatSlot };
+  setHat(model, COLORS.hat);
+  return model;
+}
+
+export function setHat(model, hatId) {
+  model.hatSlot.clear();
+  if (hatId) model.hatSlot.add(buildHat(hatId));
 }

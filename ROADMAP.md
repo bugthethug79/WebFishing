@@ -45,11 +45,14 @@ Each milestone should leave the game in a playable, polished state.
 - [x] Ambience: waves that swell louder near the shore, birdsong inland
 - [x] Procedural lo-fi music loop
 
-## Milestone 5: Economy & progression
-- [ ] HUD money + bait display
-- [ ] Sell fish at the hut (Marina the shopkeeper)
-- [ ] Shop: rods, bait, cosmetics (hats!)
-- [ ] Rod stats that affect the minigame
+## ✅ Milestone 5: Economy & progression (done)
+- [x] HUD money (with +/- popups) and current bait (click or R to switch)
+- [x] Marina the shopkeeper NPC on the hut porch: waves, turns to face you, intro + greetings
+- [x] Sell fish (price scales with size), sell all with a confirm step; bucket shows each fish's worth
+- [x] 4 rods with stats: cast distance, reel speed, tension control, luck (each has its own look)
+- [x] 3 baits bought in packs, used one per cast: faster bites, rare boost, legendary boost
+- [x] 6 hats (bucket, straw, beanie, captain, fish, crown), shown on the player
+- [x] Character model reworked for NPCs: looks, hair, swappable hats
 
 ## Milestone 6: World expansion
 - [ ] More areas (forest lake, river, pier town...) and travel between them

@@ -143,12 +143,15 @@ export function formatWeight(grams) {
 }
 
 // Picks a species for the given habitat, weighted by rarity.
-// depthBonus (0..1) nudges the odds toward rarer fish in deeper water.
-export function rollFish(habitat, depthBonus = 0, rng = Math.random) {
+// rareBoost multiplies rare + legendary odds (deep water, rod luck, bait);
+// legendaryBoost multiplies legendary odds on top (glow bait).
+export function rollFish(habitat, { rareBoost = 0, legendaryBoost = 0 } = {}, rng = Math.random) {
   const pool = FISH.filter((f) => f.habitats.includes(habitat.id));
   const weightOf = (f) => {
-    const boost = f.rarity === 'rare' || f.rarity === 'legendary' ? 1 + depthBonus : 1;
-    return RARITY[f.rarity].weight * boost;
+    let w = RARITY[f.rarity].weight;
+    if (f.rarity === 'rare' || f.rarity === 'legendary') w *= 1 + rareBoost;
+    if (f.rarity === 'legendary') w *= 1 + legendaryBoost;
+    return w;
   };
   const total = pool.reduce((sum, f) => sum + weightOf(f), 0);
   let roll = rng() * total;

@@ -3,10 +3,18 @@
 import { el } from './format.js';
 
 export class Hud {
-  constructor(root, collection, panels) {
+  constructor(root, collection, state) {
     this.root = root;
     root.append(
-      el('<div class="hud-title">WebFishing</div>'),
+      el(`
+        <div class="hud-left">
+          <div class="hud-title">WebFishing</div>
+          <div class="hud-wallet">
+            <div class="chip money"><span class="chip-icon">🪙</span><span class="money-value"></span></div>
+            <button class="chip bait" title="Change bait (R)"><span class="chip-icon bait-icon"></span><span class="bait-value"></span><kbd>R</kbd></button>
+          </div>
+        </div>
+      `),
       el(`
         <div class="hud-buttons">
           <button class="hud-btn" data-panel="bucket"><span class="hud-btn-icon">🪣</span><span class="hud-btn-text bucket-count"></span><kbd>B</kbd></button>
@@ -50,6 +58,36 @@ export class Hud {
     });
     journal.on('change', refresh);
     refresh();
+
+    // Money + bait.
+    const wallet = root.querySelector('.hud-wallet');
+    this.moneyChip = wallet.querySelector('.chip.money');
+    const moneyValue = wallet.querySelector('.money-value');
+    const baitIcon = wallet.querySelector('.bait-icon');
+    const baitValue = wallet.querySelector('.bait-value');
+    wallet.querySelector('.chip.bait').addEventListener('click', (e) => {
+      e.currentTarget.blur();
+      state.cycleBait();
+    });
+    const refreshState = (change) => {
+      moneyValue.textContent = state.money.toLocaleString();
+      const bait = state.equippedBait;
+      baitIcon.textContent = bait.icon;
+      baitValue.textContent = bait.id ? `${bait.name} ×${state.bait[bait.id]}` : bait.name;
+      if (change?.what === 'money') {
+        this.bump(this.moneyChip);
+        this.floatText(change.delta);
+      }
+    };
+    state.on('change', refreshState);
+    refreshState();
+  }
+
+  // "+45" / "-250" that drifts up from the money chip.
+  floatText(delta) {
+    const f = el(`<div class="money-float ${delta < 0 ? 'neg' : ''}">${delta > 0 ? '+' : ''}${delta}</div>`);
+    this.moneyChip.appendChild(f);
+    setTimeout(() => f.remove(), 1200);
   }
 
   bump(btn) {

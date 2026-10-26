@@ -13,12 +13,15 @@ import { CAMERA } from './config.js';
 import { Audio } from './audio/Audio.js';
 import { FishingSystem } from './fishing/FishingSystem.js';
 import { Collection } from './collection/Collection.js';
+import { PlayerState } from './economy/PlayerState.js';
+import { Shop } from './economy/Shop.js';
 import { Hud } from './ui/Hud.js';
 import { FishingUI } from './ui/FishingUI.js';
 import { PanelManager } from './ui/PanelManager.js';
 import { BucketPanel } from './ui/BucketPanel.js';
 import { JournalPanel } from './ui/JournalPanel.js';
 import { PausePanel } from './ui/PausePanel.js';
+import { ShopPanel } from './ui/ShopPanel.js';
 import { InteractPrompt } from './ui/InteractPrompt.js';
 import { DialogBox } from './ui/DialogBox.js';
 import { TitleScreen } from './ui/TitleScreen.js';
@@ -46,13 +49,28 @@ export class Game {
     this.cameraRig.snapTo(this.player.position);
     this.cameraFocus = new THREE.Vector3();
 
-    // Fishing + collection.
+    // Fishing, collection and economy.
     this.collection = new Collection();
+    this.state = new PlayerState();
+    this.shop = new Shop(this.collection.inventory, this.state);
     const fishingUI = new FishingUI(hudRoot);
+    this.toast = (msg, ms) => fishingUI.toast(msg, ms);
     fishingUI.onToast = () => this.audio.play('toast');
+    this.player.setRod(this.state.rod);
+    this.player.setHat(this.state.hatId);
+    this.state.on('change', ({ what }) => {
+      if (what === 'rod') this.player.setRod(this.state.rod);
+      if (what === 'hat') this.player.setHat(this.state.hatId);
+    });
     this.fishing = new FishingSystem(this.scene, this.world, this.player, fishingUI);
     this.fishing.audio = this.audio;
     this.fishing.onCatch = (c) => this.collection.addCatch(c);
+    this.fishing.getRod = () => this.state.rod;
+    this.fishing.useBait = () => {
+      const { bait, ranOut } = this.state.useBait();
+      if (ranOut) this.toast(`That was your last ${bait.name}!`);
+      return bait;
+    };
     this.fishing.castWarning = () =>
       this.collection.inventory.isFull ? 'Bucket full! Release some fish (B) to keep new catches.' : null;
 
@@ -60,9 +78,25 @@ export class Game {
     this.panels = new PanelManager(hudRoot);
     this.panels.register(
       'bucket',
-      new BucketPanel(this.collection.inventory, (msg) => {
-        fishingUI.toast(msg);
-        this.audio.play('splash', { size: 0.5 });
+      new BucketPanel(
+        this.collection.inventory,
+        (msg) => {
+          fishingUI.toast(msg);
+          this.audio.play('splash', { size: 0.5 });
+        },
+        (item) => this.shop.priceOf(item),
+      ),
+    );
+    this.panels.register(
+      'shop',
+      new ShopPanel(this.shop, this.state, {
+        onSold: (coins, count) => this.audio.play('coins', { count }),
+        onBought: () => this.audio.play('buy'),
+        onEquip: () => this.audio.play('equip'),
+        onCantAfford: () => {
+          this.audio.play('error');
+          this.toast('Not enough coins yet!');
+        },
       }),
     );
     this.panels.register('journal', new JournalPanel(this.collection.journal));
@@ -73,12 +107,18 @@ export class Game {
     this.panels.onOpen = () => this.audio.play('open');
     this.panels.onClose = () => this.audio.play('close');
 
-    this.hud = new Hud(hudRoot, this.collection, this.panels);
+    this.hud = new Hud(hudRoot, this.collection, this.state);
     this.hud.onPanelRequest = (name) => this.togglePanel(name);
     this.prompt = new InteractPrompt(hudRoot);
     this.dialog = new DialogBox(hudRoot);
     this.dialog.onTalk = () => this.audio.play('talk');
-    this.dialog.onClose = () => this.audio.play('close');
+    this.dialog.onClose = () => {
+      this.audio.play('close');
+      const next = this.afterDialog;
+      this.afterDialog = null;
+      next?.();
+    };
+    this.metMarina = false;
     this.zoneBanner = new ZoneBanner(hudRoot);
 
     // Soft click on every UI button.
@@ -133,7 +173,7 @@ export class Game {
       this.fishing.update(dt, this.input, this.cameraRig);
       this.cameraRig.update(dt, this.input, this.fishing.getCameraFocus(this.cameraFocus));
       this.lighting.follow(this.cameraRig.target);
-      this.world.update(this.elapsed);
+      this.world.update(this.elapsed, dt, this.player.position);
       this.audio.update(this.shoreProximity());
     }
     this.updateInteraction();
@@ -146,7 +186,10 @@ export class Game {
   handleMenuKeys() {
     const input = this.input;
     if (input.wasPressed('Escape')) {
-      if (this.dialog.isOpen) this.dialog.close();
+      if (this.dialog.isOpen) {
+        this.afterDialog = null; // Esc skips whatever the dialogue would lead to
+        this.dialog.close();
+      }
       else if (this.panels.isOpen) this.panels.close();
       else this.panels.open('pause');
       return;
@@ -154,6 +197,10 @@ export class Game {
     if (this.dialog.isOpen) return;
     if (input.wasPressed('KeyB')) this.togglePanel('bucket');
     if (input.wasPressed('KeyJ')) this.togglePanel('journal');
+    if (input.wasPressed('KeyR') && !this.panels.isOpen) {
+      this.state.cycleBait();
+      this.audio.play('equip');
+    }
   }
 
   togglePanel(name) {
@@ -177,8 +224,28 @@ export class Game {
     if (this.input.wasPressed('KeyF')) {
       this.prompt.hide();
       this.audio.play('open');
-      this.dialog.open(target.dialog);
+      if (target.npc === 'marina') this.talkToMarina();
+      else this.dialog.open(target.dialog);
     }
+  }
+
+  talkToMarina() {
+    const greetings = [
+      'Back again? Let\'s see what you caught!',
+      'Oh, hello! The fish are biting today, I can feel it.',
+      'Welcome back! Need some bait? Or... a hat?',
+      'Ahoy! Bring me something shiny and rare, okay?',
+    ];
+    const pages = this.metMarina
+      ? [greetings[Math.floor(Math.random() * greetings.length)]]
+      : [
+          'Oh! A new face! Welcome to Sunny Isle. I\'m Marina.',
+          'I run this little shop. Bring me your fish and I\'ll pay you in coins. Bigger fish are worth more!',
+          'With coins you can buy better rods, bait... and hats. Very important hats.',
+        ];
+    this.metMarina = true;
+    this.afterDialog = () => this.panels.open('shop');
+    this.dialog.open({ name: 'Marina', pages });
   }
 
   surfaceUnderPlayer() {
