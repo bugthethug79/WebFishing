@@ -12,7 +12,7 @@ import { waveHeight } from '../world/water.js';
 import { createBobber } from './Bobber.js';
 import { FishingLine } from './FishingLine.js';
 import { Effects } from './Effects.js';
-import { rollFish } from './fishTable.js';
+import { rollFish, habitatForDepth } from '../collection/fishData.js';
 import { createFishModel } from './fishModel.js';
 
 const TUNING = {
@@ -62,8 +62,10 @@ export class FishingSystem {
     this.dip = 0;
     this.dipTarget = 0;
 
-    this.catches = []; // Milestone 3 moves this into a real inventory.
+    // Set by the game: called with the catch, returns { isNew, isRecord, stored }.
     this.onCatch = null;
+    // Optional: returns a message to show when starting a cast (e.g. bucket full).
+    this.castWarning = null;
 
     this._tmp = new THREE.Vector3();
     this._screen = new THREE.Vector3();
@@ -97,6 +99,8 @@ export class FishingSystem {
     this.player.pose = 'idle';
     this.dangleBobber(dt);
     if (input.actionPressed) {
+      const warning = this.castWarning?.();
+      if (warning) this.ui.toast(warning, 2500);
       this.power = 0;
       this.powerDir = 1;
       this.setState('charging');
@@ -213,7 +217,7 @@ export class FishingSystem {
   startReeling() {
     const { x, z } = this.castTo;
     const depth = Math.max(0, WORLD.waterLevel - groundHeight(x, z));
-    this.catch = rollFish(Math.random, clamp((depth - 0.5) / 2.5, 0, 1));
+    this.catch = rollFish(habitatForDepth(depth), clamp((depth - 1.5) / 1.5, 0, 1));
     this.hookPoint.set(x, WORLD.waterLevel, z);
     this.reel = {
       progress: TUNING.reel.startProgress,
@@ -298,8 +302,7 @@ export class FishingSystem {
     this.scene.add(this.fish.object);
     this.fishFrom = new THREE.Vector3(x, WORLD.waterLevel, z);
     this.cardShown = false;
-    this.catches.push(this.catch);
-    this.onCatch?.(this.catch);
+    this.catchResult = this.onCatch?.(this.catch) ?? {};
     this.setState('caught');
   }
 
@@ -321,7 +324,7 @@ export class FishingSystem {
 
     if (t >= 1 && !this.cardShown) {
       this.cardShown = true;
-      this.ui.showCatch(this.catch);
+      this.ui.showCatch(this.catch, this.catchResult);
     }
     const canDismiss = this.cardShown && this.stateTime > 1.2;
     if ((canDismiss && input.actionPressed) || this.stateTime > 6) {

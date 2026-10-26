@@ -1,3 +1,5 @@
+import { formatWeight } from '../collection/fishData.js';
+
 // DOM widgets for the fishing loop: power meter, bite alert, reel minigame, catch card, toasts.
 
 export class FishingUI {
@@ -22,9 +24,11 @@ export class FishingUI {
         <div class="reel-hint">Hold <kbd>Space</kbd> / <kbd>Click</kbd> to reel, let go when the line gets tight</div>
       </div>
       <div class="catch-card">
+        <div class="catch-badges"></div>
         <div class="catch-new">You caught a</div>
         <div class="catch-name"></div>
         <div class="catch-meta"><span class="catch-rarity"></span><span class="catch-size"></span></div>
+        <div class="catch-note"></div>
         <div class="catch-hint">Press <kbd>Space</kbd> to continue</div>
       </div>
       <div class="toast"></div>
@@ -72,12 +76,24 @@ export class FishingUI {
     this.tensionBar.classList.toggle('danger', state.tension > 0.85);
   }
 
-  showCatch(c) {
+  // result: { isNew, isRecord, stored } from the collection.
+  showCatch(c, result = {}) {
     this.card.querySelector('.catch-name').textContent = c.species.name;
     const rarity = this.card.querySelector('.catch-rarity');
     rarity.textContent = c.rarity.label;
     rarity.style.background = c.rarity.color;
-    this.card.querySelector('.catch-size').textContent = `${c.size} cm`;
+    this.card.querySelector('.catch-size').textContent = `${c.size} cm · ${formatWeight(c.weight)}`;
+
+    const badges = [];
+    if (result.isNew) badges.push('<span class="badge new">NEW!</span>');
+    if (result.isRecord) badges.push('<span class="badge record">New record!</span>');
+    this.card.querySelector('.catch-badges').innerHTML = badges.join('');
+
+    const note = this.card.querySelector('.catch-note');
+    note.textContent = result.stored === false ? 'Your bucket is full, so it swam back home.' : result.isNew ? 'Added to your journal' : '';
+    note.classList.toggle('warn', result.stored === false);
+
+    this.card.classList.toggle('legendary', c.rarity.id === 'legendary');
     this.card.classList.add('visible');
   }
 

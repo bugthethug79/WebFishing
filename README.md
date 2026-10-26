@@ -19,6 +19,9 @@ npm run build    # production build into dist/
 | WASD / Arrows | Move |
 | Shift | Run |
 | Space / Left click | Hold to charge a cast, release to throw. Press on a bite to hook, hold to reel |
+| B | Open bucket |
+| J | Open journal |
+| Esc | Close menu |
 | Q / E | Rotate camera |
 | Mouse wheel | Zoom |
 
@@ -29,7 +32,8 @@ src/
   main.js            entry point
   Game.js            renderer, scene, main loop; wires systems together
   config.js          palette and tunable numbers
-  core/              input, math helpers
+  core/              input, math helpers, event emitter
+  collection/        fish species data, bucket (inventory), journal
   camera/            top-down follow camera
   player/            player model + controller
   fishing/           fishing state machine, rod, bobber, line, effects, placeholder fish

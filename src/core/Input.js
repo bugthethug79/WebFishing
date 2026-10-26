@@ -9,6 +9,7 @@ export class Input {
     this.pressed = new Set(); // went down this frame
     this.released = new Set(); // went up this frame
     this.wheel = 0;
+    this.enabled = true; // false while a menu is open: gameplay helpers report nothing
 
     const press = (code) => {
       if (this.down.has(code)) return;
@@ -26,7 +27,9 @@ export class Input {
       if (!e.repeat) press(e.code);
     });
     target.addEventListener('keyup', (e) => release(e.code));
-    target.addEventListener('pointerdown', (e) => e.button === 0 && press('Mouse0'));
+    // Only clicks/scrolls on the game canvas count, so UI buttons and lists don't leak into gameplay.
+    const onCanvas = (e) => e.target instanceof HTMLCanvasElement;
+    target.addEventListener('pointerdown', (e) => e.button === 0 && onCanvas(e) && press('Mouse0'));
     target.addEventListener('pointerup', (e) => e.button === 0 && release('Mouse0'));
     target.addEventListener('contextmenu', (e) => e.preventDefault());
     target.addEventListener('blur', () => {
@@ -36,6 +39,7 @@ export class Input {
     target.addEventListener(
       'wheel',
       (e) => {
+        if (!onCanvas(e)) return;
         this.wheel += Math.sign(e.deltaY);
         e.preventDefault();
       },
@@ -56,19 +60,20 @@ export class Input {
   }
 
   get actionDown() {
-    return this.isDown(...ACTION);
+    return this.enabled && this.isDown(...ACTION);
   }
 
   get actionPressed() {
-    return this.wasPressed(...ACTION);
+    return this.enabled && this.wasPressed(...ACTION);
   }
 
   get actionReleased() {
-    return this.wasReleased(...ACTION) && !this.actionDown;
+    return this.enabled && this.wasReleased(...ACTION) && !this.isDown(...ACTION);
   }
 
   // Movement axes in camera space: x = right, y = forward.
   getMoveAxis() {
+    if (!this.enabled) return { x: 0, y: 0 };
     let x = 0;
     let y = 0;
     if (this.isDown('KeyW', 'ArrowUp')) y += 1;
@@ -80,8 +85,9 @@ export class Input {
   }
 
   consumeWheel() {
-    const w = this.wheel;
+    const w = this.enabled ? this.wheel : 0;
     this.wheel = 0;
+    this.enabled = true; // false while a menu is open: gameplay helpers report nothing
     return w;
   }
 

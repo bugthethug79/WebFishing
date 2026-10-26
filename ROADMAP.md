@@ -25,11 +25,15 @@ Each milestone should leave the game in a playable, polished state.
 - [x] Ripple and splash effects; friendly messages for misses, early pulls and snapped lines
 - [x] Placeholder species table (7 fish, 4 rarities; deeper water favours rarer fish)
 
-## Milestone 3: Fish & collection
-- [ ] Fish data: species, rarity tiers, size ranges, where/when they appear
-- [ ] Low-poly fish models (procedural or simple shared meshes, tinted)
-- [ ] Inventory / bucket
-- [ ] Fish journal / collection log
+## ✅ Milestone 3: Fish & collection (done)
+- [x] Fish data: 17 species, 4 rarities, size/weight, flavour text, base price (for the shop later)
+- [x] Habitats by water depth (Shallows / Open Water / Deep Water); deeper casts favour rarer fish
+- [x] Procedural low-poly fish models: 8 body shapes, two-tone bellies, stripes, puffer spikes, glowing angler lure
+- [x] Bucket (20 slots): view catches, release fish; full bucket releases new catches automatically
+- [x] Journal: every species with silhouettes + habitat tips until discovered, then catch count and records
+- [x] Catch card badges: NEW! and New record!, weight, journal note
+- [x] HUD buttons (B / J), menus pause gameplay and only open between casts
+- [ ] Time-of-day / weather conditions for fish (needs the day/night cycle, Milestone 6)
 
 ## Milestone 4: UI & feel
 - [ ] Proper HUD (money, bait, current zone)

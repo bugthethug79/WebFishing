@@ -1,0 +1,167 @@
+// Every catchable species. This is the single source of truth for fish:
+// the fishing roll, the 3D models, the journal and (later) the shop all read from here.
+
+export const RARITY = {
+  common: { id: 'common', label: 'Common', color: '#7ccf5a', weight: 60, order: 0 },
+  uncommon: { id: 'uncommon', label: 'Uncommon', color: '#4fb3ff', weight: 28, order: 1 },
+  rare: { id: 'rare', label: 'Rare', color: '#b07cff', weight: 10, order: 2 },
+  legendary: { id: 'legendary', label: 'Legendary', color: '#ffb52e', weight: 2, order: 3 },
+};
+
+// Habitats are decided by water depth where the bobber lands.
+export const HABITATS = {
+  shallows: { id: 'shallows', label: 'Shallows', hint: 'Near the beach, in shallow water', maxDepth: 1.1 },
+  open: { id: 'open', label: 'Open Water', hint: 'A good cast away from shore', maxDepth: 2.3 },
+  deep: { id: 'deep', label: 'Deep Water', hint: 'Far out, cast from the end of the dock', maxDepth: Infinity },
+};
+
+export function habitatForDepth(depth) {
+  if (depth < HABITATS.shallows.maxDepth) return HABITATS.shallows;
+  if (depth < HABITATS.open.maxDepth) return HABITATS.open;
+  return HABITATS.deep;
+}
+
+// shape: body archetype used by the model builder.
+// strength (0..1): how hard it fights. price: base sell value (Milestone 5).
+// stripes: number of vertical bands in `stripe` colour.
+export const FISH = [
+  {
+    id: 'minnow', name: 'Minnow', rarity: 'common', habitats: ['shallows'],
+    size: [4, 10], strength: 0.1, price: 3, shape: 'standard',
+    color: 0x9fb8c8, belly: 0xe8f1f5, fin: 0x6f8fa3,
+    description: 'Tiny, quick and always hungry. Every angler\'s first friend.',
+  },
+  {
+    id: 'sardine', name: 'Sardine', rarity: 'common', habitats: ['shallows', 'open'],
+    size: [10, 22], strength: 0.2, price: 5, shape: 'standard',
+    color: 0x5a86a8, belly: 0xdfe9ef, fin: 0x4f7c99,
+    description: 'Travels in shimmering schools. Where there is one, there are hundreds.',
+  },
+  {
+    id: 'mackerel', name: 'Mackerel', rarity: 'common', habitats: ['open'],
+    size: [20, 40], strength: 0.3, price: 8, shape: 'standard',
+    color: 0x3f7f8f, belly: 0xe6eef0, fin: 0x2f5f6b, stripes: 4, stripe: 0x24464f,
+    description: 'Sleek and striped, with a fighting spirit bigger than its size.',
+  },
+  {
+    id: 'snapper', name: 'Red Snapper', rarity: 'common', habitats: ['open'],
+    size: [25, 55], strength: 0.35, price: 10, shape: 'standard',
+    color: 0xe0564f, belly: 0xffc2b0, fin: 0xc23f3a,
+    description: 'Rosy red and a little grumpy-looking. Tastes great grilled.',
+  },
+  {
+    id: 'clownfish', name: 'Clownfish', rarity: 'uncommon', habitats: ['shallows'],
+    size: [6, 12], strength: 0.25, price: 18, shape: 'standard',
+    color: 0xff8a2b, belly: 0xffb066, fin: 0xff8a2b, stripes: 3, stripe: 0xffffff,
+    description: 'Lives among anemones. Surprisingly brave for something so small.',
+  },
+  {
+    id: 'flounder', name: 'Flounder', rarity: 'uncommon', habitats: ['shallows'],
+    size: [20, 45], strength: 0.35, price: 16, shape: 'flat',
+    color: 0xb59a73, belly: 0xe8dcc4, fin: 0x8f7652,
+    description: 'Lies flat on the sand with both eyes on one side, watching you.',
+  },
+  {
+    id: 'pufferfish', name: 'Pufferfish', rarity: 'uncommon', habitats: ['shallows', 'open'],
+    size: [15, 30], strength: 0.45, price: 22, shape: 'round',
+    color: 0xf2d066, belly: 0xfff4cc, fin: 0xc98f3a,
+    description: 'Puffs up into a spiky ball when startled. Please do not squeeze.',
+  },
+  {
+    id: 'seabass', name: 'Sea Bass', rarity: 'uncommon', habitats: ['open'],
+    size: [30, 65], strength: 0.55, price: 24, shape: 'standard',
+    color: 0x6c8c9e, belly: 0xdfe6ea, fin: 0x3f5868,
+    description: 'A strong, steady fighter prized by anglers everywhere.',
+  },
+  {
+    id: 'angelfish', name: 'Angelfish', rarity: 'uncommon', habitats: ['open'],
+    size: [12, 30], strength: 0.35, price: 26, shape: 'tall',
+    color: 0x5fc9f2, belly: 0xfff27a, fin: 0x2f8fd9, stripes: 2, stripe: 0x1f4f8f,
+    description: 'Graceful and elegant, gliding through the water like a kite.',
+  },
+  {
+    id: 'tuna', name: 'Bluefin Tuna', rarity: 'uncommon', habitats: ['deep'],
+    size: [60, 150], strength: 0.7, price: 40, shape: 'standard',
+    color: 0x2b4a7a, belly: 0xd6dde8, fin: 0xf2c94c,
+    description: 'Built for speed. Hooking one feels like hooking a torpedo.',
+  },
+  {
+    id: 'parrotfish', name: 'Parrotfish', rarity: 'rare', habitats: ['shallows', 'open'],
+    size: [25, 60], strength: 0.5, price: 60, shape: 'standard',
+    color: 0x3fd1a6, belly: 0x9ef2d6, fin: 0xff7ab8, stripes: 2, stripe: 0x2fa6e0,
+    description: 'Crunches coral with its beak and turns it into soft white sand.',
+  },
+  {
+    id: 'mahimahi', name: 'Mahi-mahi', rarity: 'rare', habitats: ['open', 'deep'],
+    size: [60, 120], strength: 0.75, price: 75, shape: 'tall',
+    color: 0x4fd18a, belly: 0xffe066, fin: 0x2fa6e0,
+    description: 'Dazzling green and gold. Its colours shift as it leaps.',
+  },
+  {
+    id: 'moray', name: 'Moray Eel', rarity: 'rare', habitats: ['deep'],
+    size: [80, 180], strength: 0.65, price: 70, shape: 'long',
+    color: 0x6b8f3a, belly: 0xc9d97a, fin: 0x55752c,
+    description: 'Hides in rocky crevices with its mouth open. Not actually smiling.',
+  },
+  {
+    id: 'manta', name: 'Manta Ray', rarity: 'rare', habitats: ['deep'],
+    size: [100, 300], strength: 0.8, price: 90, shape: 'ray',
+    color: 0x35455e, belly: 0xf0f2f5, fin: 0x35455e,
+    description: 'A gentle giant that soars through the deep on enormous wings.',
+  },
+  {
+    id: 'swordfish', name: 'Swordfish', rarity: 'rare', habitats: ['deep'],
+    size: [120, 300], strength: 0.9, price: 110, shape: 'sword',
+    color: 0x4a5f8f, belly: 0xd6dde8, fin: 0x34466e,
+    description: 'Duels the open ocean with its long bill. A true trophy.',
+  },
+  {
+    id: 'anglerfish', name: 'Anglerfish', rarity: 'legendary', habitats: ['deep'],
+    size: [20, 60], strength: 0.85, price: 250, shape: 'angler',
+    color: 0x3d2f4f, belly: 0x5e4a73, fin: 0x2a1f38,
+    description: 'Dangles a glowing lure in the darkest water. Few have seen one up close.',
+  },
+  {
+    id: 'koi', name: 'Golden Koi', rarity: 'legendary', habitats: ['shallows', 'open', 'deep'],
+    size: [50, 90], strength: 0.9, price: 300, shape: 'standard',
+    color: 0xffb52e, belly: 0xfff0b3, fin: 0xff6a3d,
+    description: 'Said to bring good fortune to whoever catches it. Appears anywhere, rarely.',
+  },
+];
+
+export const FISH_BY_ID = Object.fromEntries(FISH.map((f) => [f.id, f]));
+
+// Shape affects how heavy a fish is for its length.
+const DENSITY = { standard: 1, round: 1.6, tall: 0.8, flat: 0.6, long: 0.2, ray: 0.9, sword: 0.9, angler: 1.8 };
+
+export function weightGrams(species, sizeCm) {
+  return Math.round(0.013 * DENSITY[species.shape] * sizeCm ** 3);
+}
+
+export function formatWeight(grams) {
+  return grams >= 1000 ? `${(grams / 1000).toFixed(1)} kg` : `${grams} g`;
+}
+
+// Picks a species for the given habitat, weighted by rarity.
+// depthBonus (0..1) nudges the odds toward rarer fish in deeper water.
+export function rollFish(habitat, depthBonus = 0, rng = Math.random) {
+  const pool = FISH.filter((f) => f.habitats.includes(habitat.id));
+  const weightOf = (f) => {
+    const boost = f.rarity === 'rare' || f.rarity === 'legendary' ? 1 + depthBonus : 1;
+    return RARITY[f.rarity].weight * boost;
+  };
+  const total = pool.reduce((sum, f) => sum + weightOf(f), 0);
+  let roll = rng() * total;
+  let species = pool[0];
+  for (const f of pool) {
+    roll -= weightOf(f);
+    if (roll <= 0) {
+      species = f;
+      break;
+    }
+  }
+  const [min, max] = species.size;
+  // Bias sizes toward the lower end so big ones feel special.
+  const size = Math.round(min + (max - min) * Math.pow(rng(), 1.6));
+  return { species, size, weight: weightGrams(species, size), rarity: RARITY[species.rarity], habitat };
+}
