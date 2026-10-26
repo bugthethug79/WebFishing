@@ -29,7 +29,8 @@ export class Audio {
     this.sfx.play(name, opts, minGap);
   }
 
-  update(shore) {
-    this.ambience.update(shore);
+  update(shore, env) {
+    this.ambience.update(shore, env);
+    this.music.night = env?.night ?? 0;
   }
 }

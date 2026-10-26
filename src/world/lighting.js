@@ -16,13 +16,15 @@ export function createLighting(scene) {
   sun.shadow.normalBias = 0.03;
   scene.add(sun, sun.target);
 
-  const sunOffset = new THREE.Vector3(18, 32, 14);
+  const sunOffset = new THREE.Vector3(18, 32, 14); // moved through the day by Sky
 
   scene.background = new THREE.Color(PALETTE.sky);
   scene.fog = new THREE.Fog(PALETTE.fog, 55, 130);
 
   return {
     sun,
+    hemi,
+    sunOffset,
     // Keep the shadow frustum centred on whatever we're looking at.
     follow(target) {
       sun.position.copy(target).add(sunOffset);

@@ -1,153 +1,181 @@
-// Assembles the starter island: terrain, water, dock, hut and scattered props.
-// Also answers gameplay questions about the world (where can I stand? what's in my way?).
+// A loaded zone: terrain, water, props, NPCs and the gameplay queries about them
+// (where can I stand? what's in my way? what can I interact with?).
+// The zone definition (zones/*.js) decides what goes where; this class provides the toolkit.
 
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { WORLD } from '../config.js';
 import { createRng } from '../core/math.js';
+import { Island } from './Island.js';
 import { createTerrain } from './terrain.js';
 import { createWater } from './water.js';
-import { shorePoint, inlandDistance, groundHeight, addFlattenZone, isGrass } from './island.js';
 import { Colliders } from './Colliders.js';
 import { createDock, DOCK } from './props/dock.js';
-import { createHut } from './props/hut.js';
-import { createRoundTree, createPalm } from './props/trees.js';
-import { createRock } from './props/rocks.js';
-import { createFlower, createTuft } from './props/decor.js';
+import { createLampPost, createRowboat } from './props/harbor.js';
 import { createSignpost } from './props/signpost.js';
-import { Npc } from '../npc/Npc.js';
-
-// Hand-tuned anchor points, in island polar coordinates (angle, distance inland).
-export const ZONE = { name: 'Sunny Isle', subtitle: 'A quiet little island' };
-
-const LAYOUT = {
-  dockAngle: Math.PI / 2 + 0.35, // south side, facing the default camera
-  dockInland: 2.8,
-  hutAngleOffset: -0.34,
-  hutInland: 9,
-  spawnInland: 6.5,
-};
+import { waveHeight } from './water.js';
 
 export class World {
-  constructor(scene) {
+  constructor(scene, zone) {
     this.scene = scene;
+    this.zone = zone;
     this.root = new THREE.Group();
-    this.root.name = 'world';
+    this.root.name = `zone:${zone.id}`;
     scene.add(this.root);
+    // Non-moving props go here and are merged into a few meshes after building (see batchStatic).
+    this.static = new THREE.Group();
+    this.root.add(this.static);
 
-    this.rng = createRng(WORLD.seed + 1);
+    this.island = new Island(zone.island);
+    this.rng = createRng(zone.seed + 1);
     this.colliders = new Colliders();
     this.blockers = []; // {x, z, r} areas props shouldn't spawn in
-    // Things the player can walk up to and press F on: { x, z, y, radius, verb, dialog }.
+    // Things the player can press F on: { x, z, y, radius, verb, dialog | npc | travel }.
     this.interactables = [];
     this.npcs = [];
-    this.zone = ZONE;
+    this.platforms = []; // walkable docks / jetties
+    this.nightLights = []; // { light, intensity } switched on after dark
+    this.nightEmissive = []; // { material, color, intensity } glow after dark
+    this.animated = []; // { update(time, night) }
+    this.floaters = []; // { object, lift } bobbing on the water
 
-    // Order matters: flatten zones must exist before the terrain mesh is built.
-    this.placeHut();
-    this.root.add(createTerrain());
-    this.water = createWater();
+    // Zone layout first: it registers flatten zones that the terrain needs.
+    zone.build(this);
+    this.batchStatic();
+    this.root.add(createTerrain(this.island, zone));
+    this.water = createWater(this.island, zone);
     this.root.add(this.water.group);
-    this.placeDock();
-    this.placeSignpost();
-    this.placeSpawn();
-    this.scatterProps();
   }
 
-  placeDock() {
-    const theta = LAYOUT.dockAngle;
-    const base = shorePoint(theta, LAYOUT.dockInland);
-    const dock = createDock(this.rng);
-    dock.position.set(base.x, 0, base.z);
-    dock.rotation.y = -theta; // local +X points out to sea
-    this.root.add(dock);
+  // ---------- placement helpers used by zone builders ----------
 
-    this.dock = {
-      x: base.x,
-      z: base.z,
-      dirX: Math.cos(theta),
-      dirZ: Math.sin(theta),
+  isBlocked(x, z, pad = 0) {
+    return this.blockers.some((b) => Math.hypot(x - b.x, z - b.z) < b.r + pad);
+  }
+
+  // A random free spot in a band of inland distance.
+  findSpot(minInland, maxInland, spacing, tries = 40) {
+    for (let i = 0; i < tries; i++) {
+      const p = this.island.shorePoint(this.rng() * Math.PI * 2, this.rng.range(minInland, maxInland));
+      if (!this.isBlocked(p.x, p.z, spacing)) return p;
+    }
+    return null;
+  }
+
+  // For decoration that never moves: it gets merged with everything else of the same material.
+  addStatic(object) {
+    this.static.add(object);
+  }
+
+  addProp(prop, p, collide = true) {
+    prop.object.position.set(p.x, this.island.groundHeight(p.x, p.z), p.z);
+    this.addStatic(prop.object);
+    if (collide) this.colliders.addCircle(p.x, p.z, prop.radius);
+    this.blockers.push({ x: p.x, z: p.z, r: prop.radius + 0.6 });
+  }
+
+  // Dock/jetty starting `inland` units on land at angle `theta`, pointing out over the water.
+  addPlatform(theta, inland, size = DOCK) {
+    const island = this.island;
+    const base = island.shorePoint(theta, inland);
+    const ahead = island.shorePoint(theta, inland - 1);
+    const len = Math.hypot(ahead.x - base.x, ahead.z - base.z);
+    const dirX = (ahead.x - base.x) / len;
+    const dirZ = (ahead.z - base.z) / len;
+
+    const mesh = createDock(this.rng, size);
+    mesh.position.set(base.x, 0, base.z);
+    mesh.rotation.y = Math.atan2(-dirZ, dirX); // local +X along the platform
+    this.addStatic(mesh);
+
+    const platform = { x: base.x, z: base.z, dirX, dirZ, ...size };
+    platform.toWorld = (along, across) => ({
+      x: base.x + dirX * along - dirZ * across,
+      z: base.z + dirZ * along + dirX * across,
+    });
+    platform.contains = (x, z) => {
+      const dx = x - base.x;
+      const dz = z - base.z;
+      const along = dx * dirX + dz * dirZ;
+      const across = -dx * dirZ + dz * dirX;
+      return along >= -0.2 && along <= size.length && Math.abs(across) <= size.width / 2 - 0.15;
     };
+    this.platforms.push(platform);
 
-    // Collide with the posts that sit on land or along the edges.
-    for (const px of [1.5, DOCK.length / 2, DOCK.length - 0.3]) {
+    // Posts along the edges.
+    for (const px of [1.5, size.length / 2, size.length - 0.3]) {
       for (const side of [-1, 1]) {
-        const p = this.dockToWorld(px, side * (DOCK.width / 2 + 0.05));
+        const p = platform.toWorld(px, side * (size.width / 2 + 0.05));
         this.colliders.addCircle(p.x, p.z, 0.2);
       }
     }
-    this.blockers.push({ ...this.dockToWorld(0, 0), r: 3.5 });
+    this.blockers.push({ ...platform.toWorld(0, 0), r: 3.5 });
+    return platform;
   }
 
-  placeHut() {
-    const theta = LAYOUT.dockAngle + LAYOUT.hutAngleOffset;
-    const p = shorePoint(theta, LAYOUT.hutInland);
-    const hut = createHut();
-    const facing = Math.atan2(Math.cos(theta), Math.sin(theta)); // front (+Z) faces the sea
-    const h = addFlattenZone(p.x, p.z, 5.5);
-    hut.object.position.set(p.x, h - 0.05, p.z);
-    hut.object.rotation.y = facing;
-    this.root.add(hut.object);
-
-    // Marina the shopkeeper stands on the porch.
-    const marina = new Npc({
-      skin: 0xc98f6b,
-      shirt: 0xfff4e0,
-      stripe: 0xff8fb1,
-      jacket: 0x3fbfa0,
-      pants: 0x6b4f8f,
-      shoes: 0x8a5a3b,
-      hair: 0x5a3322,
-      hat: 'straw',
-    });
-    marina.object.position.set(0.3, 0.3, 2.5); // front edge of the porch, clear of the roof
-    hut.object.add(marina.object);
-    this.npcs.push(marina);
-
-    const front = 3.6;
-    this.interactables.push({
-      x: p.x + Math.sin(facing) * front,
-      z: p.z + Math.cos(facing) * front,
-      y: h + 2.9,
-      radius: 2.8,
-      verb: 'Talk',
-      npc: 'marina', // the game opens Marina's dialogue + shop
-    });
-
-    // Box collider shifted to match the porch offset.
-    const ox = Math.sin(facing) * hut.offsetZ;
-    const oz = Math.cos(facing) * hut.offsetZ;
-    this.colliders.addBox(p.x + ox, p.z + oz, hut.halfW, hut.halfD, facing);
-    this.blockers.push({ x: p.x, z: p.z, r: 5 });
+  addLamp(x, z) {
+    const lamp = createLampPost();
+    lamp.object.position.set(x, this.getWalkHeight(x, z) ?? this.island.groundHeight(x, z), z);
+    this.root.add(lamp.object);
+    this.colliders.addCircle(x, z, 0.2);
+    this.blockers.push({ x, z, r: 1 });
+    this.nightLights.push({ light: lamp.light, intensity: 10 });
+    this.nightEmissive.push({ material: lamp.bulbMaterial, intensity: 2 });
   }
 
-  placeSignpost() {
-    const p = this.dockToWorld(-1.4, 2.7);
-    const sign = createSignpost(ZONE.name);
-    const y = groundHeight(p.x, p.z);
+  addSignpost(platform, text, pages) {
+    const p = platform.toWorld(-1.4, 2.7);
+    const sign = createSignpost(text);
+    const y = this.island.groundHeight(p.x, p.z);
     sign.position.set(p.x, y, p.z);
-    // Face the board out to sea, which is toward the default camera.
-    sign.rotation.y = Math.atan2(this.dock.dirX, this.dock.dirZ);
+    sign.rotation.y = Math.atan2(platform.dirX, platform.dirZ); // face along the platform
     this.root.add(sign);
     this.colliders.addCircle(p.x, p.z, 0.3);
     this.blockers.push({ x: p.x, z: p.z, r: 1.5 });
-    this.interactables.push({
-      x: p.x,
-      z: p.z,
-      y: y + 2.4,
-      radius: 1.8,
-      verb: 'Read',
-      dialog: {
-        name: 'Signpost',
-        pages: [
-          `Welcome to ${ZONE.name}! 🌴`,
-          'Hold Space or click to charge a cast, then let go. The marker shows where your bobber will land.',
-          'Deeper water hides rarer fish. Try casting from the end of the dock!',
-          'When the bobber dips and a "!" pops up, press Space to hook. Hold to reel, but ease off when the line gets tight.',
-          'Open your Journal (J) to see which fish are still out there. Happy fishing!',
-        ],
-      },
-    });
+    this.interactables.push({ x: p.x, z: p.z, y: y + 2.4, radius: 1.8, verb: 'Read', dialog: { name: 'Signpost', pages } });
   }
+
+  // Rowboat moored beside the end of a platform; talking to it opens the travel menu.
+  addFerry(platform, color) {
+    const along = platform.length - 1.6;
+    const p = platform.toWorld(along, platform.width / 2 + 0.9);
+    const boat = createRowboat(color);
+    boat.position.set(p.x, 0, p.z);
+    boat.rotation.y = Math.atan2(-platform.dirZ, platform.dirX);
+    this.root.add(boat);
+    this.floaters.push({ object: boat, lift: 0.46 }); // keep the hull interior above the (see-through) water
+    const stand = platform.toWorld(along, platform.width / 2 - 0.6);
+    this.interactables.push({ x: stand.x, z: stand.z, y: platform.deckHeight + 2.3, radius: 1.6, verb: 'Sail', travel: true });
+  }
+
+  // Merges every static mesh that shares a material (and shadow setting) into one mesh.
+  // Hundreds of little props become a handful of draw calls; they look exactly the same.
+  batchStatic() {
+    this.static.updateMatrixWorld(true);
+    const batches = new Map();
+    this.static.traverse((o) => {
+      if (!o.isMesh) return;
+      let g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone();
+      // Only keep what flat-shaded materials need, so every geometry has matching attributes.
+      for (const name of Object.keys(g.attributes)) if (name !== 'position' && name !== 'normal') g.deleteAttribute(name);
+      g.applyMatrix4(o.matrixWorld);
+      const key = `${o.material.uuid}|${o.castShadow}`;
+      if (!batches.has(key)) batches.set(key, { material: o.material, cast: o.castShadow, geometries: [] });
+      batches.get(key).geometries.push(g);
+    });
+    this.static.traverse((o) => o.geometry?.dispose());
+    this.root.remove(this.static);
+    for (const { material, cast, geometries } of batches.values()) {
+      const merged = mergeGeometries(geometries);
+      geometries.forEach((g) => g.dispose());
+      const mesh = new THREE.Mesh(merged, material);
+      mesh.castShadow = cast;
+      mesh.receiveShadow = true;
+      this.root.add(mesh);
+    }
+  }
+
+  // ---------- gameplay queries ----------
 
   nearestInteractable(x, z) {
     let best = null;
@@ -162,98 +190,48 @@ export class World {
     return best;
   }
 
-  placeSpawn() {
-    const s = shorePoint(LAYOUT.dockAngle, LAYOUT.spawnInland);
-    this.spawn = new THREE.Vector3(s.x, groundHeight(s.x, s.z), s.z);
-    this.blockers.push({ x: s.x, z: s.z, r: 3 });
-    // Keep a clear path from spawn to the dock.
-    const mid = shorePoint(LAYOUT.dockAngle, (LAYOUT.spawnInland + LAYOUT.dockInland) / 2);
-    this.blockers.push({ x: mid.x, z: mid.z, r: 2.5 });
-  }
-
-  isBlocked(x, z, pad = 0) {
-    return this.blockers.some((b) => Math.hypot(x - b.x, z - b.z) < b.r + pad);
-  }
-
-  // Try to find a random free spot in a band of "inland distance".
-  findSpot(minInland, maxInland, spacing, tries = 40) {
-    for (let i = 0; i < tries; i++) {
-      const p = shorePoint(this.rng() * Math.PI * 2, this.rng.range(minInland, maxInland));
-      if (Math.hypot(p.x, p.z) > WORLD.islandRadius + 6) continue;
-      if (this.isBlocked(p.x, p.z, spacing)) continue;
-      return p;
-    }
-    return null;
-  }
-
-  addProp(prop, p, collide = true) {
-    prop.object.position.set(p.x, groundHeight(p.x, p.z), p.z);
-    this.root.add(prop.object);
-    if (collide) this.colliders.addCircle(p.x, p.z, prop.radius);
-    this.blockers.push({ x: p.x, z: p.z, r: prop.radius + 0.6 });
-  }
-
-  scatterProps() {
-    const rng = this.rng;
-
-    for (let i = 0; i < 26; i++) {
-      const p = this.findSpot(7, 26, 1.6);
-      if (p) this.addProp(createRoundTree(rng, rng.range(0.85, 1.25)), p);
-    }
-    for (let i = 0; i < 9; i++) {
-      const p = this.findSpot(3.8, 5.5, 2.5);
-      if (p) this.addProp(createPalm(rng, rng.range(0.9, 1.2)), p);
-    }
-    // Rocks on the beach, on the grass, and poking out of the shallows.
-    for (let i = 0; i < 6; i++) {
-      const p = this.findSpot(0.8, 3, 1);
-      if (p) this.addProp(createRock(rng, rng.range(0.7, 1.3)), p);
-    }
-    for (let i = 0; i < 5; i++) {
-      const p = this.findSpot(8, 20, 1);
-      if (p) this.addProp(createRock(rng, rng.range(0.5, 0.9), true), p);
-    }
-    for (let i = 0; i < 7; i++) {
-      const p = this.findSpot(-4, -1, 1.5);
-      if (p) this.addProp(createRock(rng, rng.range(1.2, 2.2)), p, false);
-    }
-
-    // Decorative detail, no collision and allowed close to other things.
-    for (let i = 0; i < 220; i++) {
-      const p = shorePoint(rng() * Math.PI * 2, rng.range(5, 28));
-      if (!isGrass(inlandDistance(p.x, p.z)) || Math.hypot(p.x, p.z) > WORLD.islandRadius + 4) continue;
-      if (this.colliders.circles.some((c) => Math.hypot(p.x - c.x, p.z - c.z) < c.r + 0.2)) continue;
-      const deco = rng() < 0.35 ? createFlower(rng) : createTuft(rng);
-      deco.position.set(p.x, groundHeight(p.x, p.z), p.z);
-      deco.rotation.y = rng() * Math.PI * 2;
-      this.root.add(deco);
-    }
-  }
-
-  dockToWorld(along, across) {
-    const { x, z, dirX, dirZ } = this.dock;
-    // "across" is perpendicular to the dock direction (local +Z).
-    return { x: x + dirX * along - dirZ * across, z: z + dirZ * along + dirX * across };
+  platformAt(x, z) {
+    return this.platforms.find((p) => p.contains(x, z)) ?? null;
   }
 
   isOnDock(x, z) {
-    const { x: bx, z: bz, dirX, dirZ } = this.dock;
-    const dx = x - bx;
-    const dz = z - bz;
-    const along = dx * dirX + dz * dirZ;
-    const across = -dx * dirZ + dz * dirX;
-    return along >= -0.2 && along <= DOCK.length && Math.abs(across) <= DOCK.width / 2 - 0.15;
+    return this.platformAt(x, z) !== null;
   }
 
   // Height of the walkable surface at (x, z), or null if the spot isn't walkable.
   getWalkHeight(x, z) {
-    if (this.isOnDock(x, z)) return DOCK.deckHeight;
-    const h = groundHeight(x, z);
+    const platform = this.platformAt(x, z);
+    if (platform) return platform.deckHeight;
+    if (this.island.inlandDistance(x, z) > this.island.maxInland) return null;
+    const h = this.island.groundHeight(x, z);
     return h > WORLD.waterLevel + 0.06 ? h : null;
   }
 
-  update(time, dt, playerPos) {
+  // ---------- per frame ----------
+
+  // night: 0 (day) .. 1 (full night)
+  update(time, dt, playerPos, night = 0) {
     this.water.update(time);
     for (const npc of this.npcs) npc.update(dt, playerPos);
+    for (const a of this.animated) a.update(time, night);
+    for (const l of this.nightLights) l.light.intensity = l.intensity * night * (l.light.userData.flicker ?? 1);
+    for (const e of this.nightEmissive) {
+      e.material.emissive?.setHex(e.color ?? e.material.emissive.getHex());
+      e.material.emissiveIntensity = e.intensity * night;
+    }
+    for (const { object: f, lift } of this.floaters) {
+      f.position.y = waveHeight(f.position.x, f.position.z, time) + lift;
+      f.rotation.x = Math.sin(time * 1.3 + f.position.x) * 0.05;
+    }
+  }
+
+  dispose() {
+    this.scene.remove(this.root);
+    this.root.traverse((o) => {
+      o.geometry?.dispose();
+      // Shared cached materials are reused across zones, so only free textures.
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      for (const m of mats) m?.map?.dispose();
+    });
   }
 }

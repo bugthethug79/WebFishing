@@ -19,6 +19,7 @@ export class Music {
   constructor(engine) {
     this.engine = engine;
     this.playing = false;
+    this.night = 0; // 0..1: softer and sparser after dark
     this.step = 0;
     this.nextTime = 0;
   }
@@ -52,13 +53,14 @@ export class Music {
     const section = Math.floor(bar / 4) % 4; // vary density every few loops
 
     // Arpeggio, an octave up.
-    if (section !== 3 || beat % 2 === 0) this.pluck(midi(chord[ARP[beat]] + 12), at, 0.07, 0.9);
+    const soft = 1 - this.night * 0.35;
+    if (section !== 3 || beat % 2 === 0) this.pluck(midi(chord[ARP[beat]] + 12), at, 0.07 * soft, 0.9);
 
     // Bass on beats 1 and 3.
     if (beat === 0 || beat === 4) this.bass(midi(chord[0] - 12), at);
 
     // Sparse melody, a bit busier in the middle sections.
-    const chance = [0.15, 0.3, 0.35, 0.1][section];
+    const chance = [0.15, 0.3, 0.35, 0.1][section] * (1 - this.night * 0.5);
     if (beat % 2 === 0 && Math.random() < chance) {
       const note = PENTATONIC[Math.floor(Math.random() * PENTATONIC.length)];
       this.bell(midi(note), at);

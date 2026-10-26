@@ -28,6 +28,9 @@ export class Effects {
     }
     Object.assign(r, { active: true, age: 0, duration, size });
     r.mesh.visible = true;
+    // Start small right away, or it renders one frame at full size before update() runs.
+    r.mesh.scale.setScalar(size * 0.2);
+    r.mesh.material.opacity = 0.8;
     r.mesh.position.set(x, WORLD.waterLevel + 0.06, z);
   }
 

@@ -221,20 +221,21 @@ kbd {
 
 /* ---------- Panels ---------- */
 
+/* Menus must never depend on an animation finishing to be visible (a busy GPU can stall
+   compositor animations), so only the backdrop colour and the panel's scale animate. */
 .panel-overlay {
   position: absolute;
   inset: 0;
   z-index: 10;
-  display: flex;
+  display: none;
   align-items: center;
   justify-content: center;
   padding: 16px;
   background: rgba(20, 60, 80, 0.35);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.2s;
+  pointer-events: auto;
 }
-.panel-overlay.visible { opacity: 1; pointer-events: auto; }
+.panel-overlay.visible { display: flex; animation: backdrop-in 0.2s ease-out; }
+@keyframes backdrop-in { from { background: rgba(20, 60, 80, 0); } }
 
 .panel {
   display: none;
@@ -248,7 +249,7 @@ kbd {
   overflow: hidden;
 }
 .panel.visible { display: flex; animation: panel-in 0.25s cubic-bezier(0.34, 1.56, 0.64, 1); }
-@keyframes panel-in { from { transform: scale(0.9); opacity: 0; } }
+@keyframes panel-in { from { transform: scale(0.92); } }
 
 .panel-header {
   display: flex;
@@ -657,3 +658,51 @@ kbd {
   .shop-card { flex-wrap: wrap; }
   .tab { padding: 6px 10px; font-size: 13px; }
 }
+
+/* ---------- Milestone 6: travel ---------- */
+
+.fade { position: absolute; inset: 0; z-index: 40; background: #123848; opacity: 0; pointer-events: none; transition: opacity 0.6s; }
+.fade.visible { opacity: 1; pointer-events: auto; }
+
+.travel-panel { width: min(720px, 100%); }
+.travel-body { gap: 16px; }
+.zone-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 0 16px;
+  border: 3px solid transparent;
+  border-radius: 18px;
+  background: #fff;
+  overflow: hidden;
+  text-align: center;
+  box-shadow: 0 3px 0 rgba(43, 111, 138, 0.15);
+}
+.zone-card.here { border-color: #4fc3d6; }
+.zone-card > :not(.zone-card-art) { margin-left: 16px; margin-right: 16px; }
+.zone-card-art { height: 110px; margin-bottom: 8px; }
+.zone-sunny .zone-card-art { background: linear-gradient(180deg, #7fe0e8 0 45%, #f2d59b 45% 62%, #3ccfe0 62%); }
+.zone-pine .zone-card-art { background: linear-gradient(180deg, #c9a8e8 0 30%, #3f8a45 30% 58%, #37b5b0 58%); }
+.zone-card-name { font-size: 22px; font-weight: 700; }
+.zone-card-sub { font-size: 14px; font-weight: 600; opacity: 0.7; }
+.zone-card-desc { flex: 1; margin-top: 6px; font-size: 14px; line-height: 1.4; opacity: 0.85; }
+.zone-card-fish { font-size: 14px; font-weight: 600; }
+.zone-card .btn { align-self: center; }
+@media (max-width: 640px) { .travel-body { flex-direction: column; } }
+
+.species-heading {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: space-between;
+  margin-top: 6px;
+  padding: 0 4px;
+  font-size: 15px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  opacity: 0.65;
+}
+.species-heading span { letter-spacing: 0; text-transform: none; }
+.chip.clock { min-width: 120px; }
+.weather-icon:empty { display: none; }

@@ -1,4 +1,5 @@
-// Background soundscape: rolling waves (louder near the shore) and birdsong (inland).
+// Background soundscape: rolling waves (louder near the shore), birdsong by day,
+// crickets at night, and rain.
 
 export class Ambience {
   constructor(engine) {
@@ -28,17 +29,39 @@ export class Ambience {
     this.level.gain.value = 0.3;
     src.connect(this.filter).connect(this.swell).connect(this.level).connect(a.buses.ambient);
     src.start();
+
+    // Rain: bright hiss whose level follows the weather.
+    const rainSrc = ctx.createBufferSource();
+    rainSrc.buffer = a.noiseBuffer;
+    rainSrc.loop = true;
+    const rainFilter = ctx.createBiquadFilter();
+    rainFilter.type = 'bandpass';
+    rainFilter.frequency.value = 3000;
+    rainFilter.Q.value = 0.4;
+    this.rainLevel = ctx.createGain();
+    this.rainLevel.gain.value = 0;
+    rainSrc.connect(rainFilter).connect(this.rainLevel).connect(a.buses.ambient);
+    rainSrc.start();
+    this.nextCricket = a.now + 1;
     this.nextWave = a.now + 0.5;
     this.nextBird = a.now + 2;
   }
 
-  // shore: 0 when far inland, 1 standing at the water's edge or on the dock.
-  update(shore) {
+  // shore: 0 far inland .. 1 at the water's edge. env: { night, rain, waves } all 0..1.
+  update(shore, { night = 0, rain = 0, waves = 1 } = {}) {
     const a = this.engine;
     if (!this.started) return;
     const now = a.now;
     this.shore = shore;
-    this.level.gain.setTargetAtTime(0.25 + shore * 0.55, now, 0.5);
+    this.level.gain.setTargetAtTime((0.25 + shore * 0.55) * waves, now, 0.5);
+    this.rainLevel.gain.setTargetAtTime(rain * 0.3, now, 0.5);
+
+    // Crickets after dark: little triple chirps.
+    if (night > 0.3 && now >= this.nextCricket) {
+      const f = 4200 + Math.random() * 600;
+      for (let i = 0; i < 3; i++) a.tone(f, { at: now + i * 0.06, dur: 0.035, gain: 0.018 * night, bus: 'ambient' });
+      this.nextCricket = now + 0.5 + Math.random() * 1.2;
+    }
 
     // Schedule the next wave rolling in and out.
     if (now >= this.nextWave) {
@@ -60,7 +83,7 @@ export class Ambience {
 
     // Birds chirp more often away from the surf.
     if (now >= this.nextBird) {
-      this.chirp(0.03 * (1.2 - shore * 0.7));
+      if (night < 0.5 && rain < 0.5) this.chirp(0.03 * (1.2 - shore * 0.7) * (1 - night));
       this.nextBird = now + 2.5 + Math.random() * 6 * (0.6 + shore);
     }
   }

@@ -2,7 +2,6 @@
 
 import * as THREE from 'three';
 import { PALETTE, WORLD } from '../config.js';
-import { shoreRadius } from './island.js';
 
 const WAVE_GLSL = /* glsl */ `
   float waveHeight(vec2 p, float t) {
@@ -20,13 +19,14 @@ export function waveHeight(x, z, t) {
   );
 }
 
-export function createWater() {
+export function createWater(island, zone) {
+  const waterColor = zone.palette.water ?? PALETTE.water;
   const uniforms = { uTime: { value: 0 } };
 
   // Dense near the island for visible facets, plain far away.
   const near = new THREE.PlaneGeometry(140, 140, 110, 110).rotateX(-Math.PI / 2);
   const material = new THREE.MeshStandardMaterial({
-    color: PALETTE.water,
+    color: waterColor,
     transparent: true,
     opacity: 0.72,
     roughness: 0.2,
@@ -55,36 +55,42 @@ export function createWater() {
   outerShape.holes.push(new THREE.Path().moveTo(-70, -70).lineTo(-70, 70).lineTo(70, 70).lineTo(70, -70).closePath());
   const far = new THREE.Mesh(
     new THREE.ShapeGeometry(outerShape).rotateX(-Math.PI / 2),
-    new THREE.MeshStandardMaterial({ color: PALETTE.water, transparent: true, opacity: 0.72, roughness: 0.3 }),
+    new THREE.MeshStandardMaterial({ color: waterColor, transparent: true, opacity: 0.72, roughness: 0.3 }),
   );
   far.position.y = WORLD.waterLevel;
   far.renderOrder = 1;
 
-  const foam = createFoam(uniforms);
+  const foam = createFoam(uniforms, island);
 
   const group = new THREE.Group();
-  group.add(surface, far, foam);
+  group.add(surface, foam);
+  // A lake is surrounded by land, so it doesn't need the endless ocean.
+  if (!island.inverted) group.add(far);
   group.name = 'water';
 
   return {
     group,
+    foamColor: foam.material.uniforms.uColor.value,
     update(time) {
       uniforms.uTime.value = time;
     },
   };
 }
 
-function createFoam(uniforms) {
+function createFoam(uniforms, island) {
   const segments = 360;
-  const inner = -0.25; // slightly up the beach
-  const outer = 1.4; // out to sea
+  // Offsets from the waterline toward land and toward open water.
+  // Islands have land inside the shoreline, lakes outside it.
+  const s = island.inverted ? -1 : 1;
+  const inner = -0.25 * s; // slightly up the beach
+  const outer = 1.4 * s; // out over the water
   const positions = [];
   const uvs = [];
   const indices = [];
 
   for (let i = 0; i <= segments; i++) {
     const theta = (i / segments) * Math.PI * 2;
-    const r = shoreRadius(theta);
+    const r = island.shoreRadius(theta);
     const cos = Math.cos(theta);
     const sin = Math.sin(theta);
     positions.push(cos * (r + inner), 0, sin * (r + inner));

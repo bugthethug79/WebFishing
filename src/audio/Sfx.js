@@ -102,6 +102,10 @@ const SOUNDS = {
     a.tone(220, { dur: 0.12, type: 'square', gain: 0.06, filter: 1200 });
     a.tone(180, { at: a.now + 0.12, dur: 0.18, type: 'square', gain: 0.06, filter: 1200 });
   },
+  travel(a) {
+    a.noise({ dur: 1.4, gain: 0.12, freq: 400, freqEnd: 900, attack: 0.5 });
+    [67, 72, 76].forEach((n, i) => a.tone(midi(n), { at: a.now + 0.2 + i * 0.12, dur: 0.6, type: 'triangle', gain: 0.1 }));
+  },
   talk(a) {
     a.tone(400 + Math.random() * 200, { dur: 0.04, type: 'triangle', gain: 0.05 });
   },

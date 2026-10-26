@@ -12,6 +12,7 @@ export class Hud {
           <div class="hud-wallet">
             <div class="chip money"><span class="chip-icon">🪙</span><span class="money-value"></span></div>
             <button class="chip bait" title="Change bait (R)"><span class="chip-icon bait-icon"></span><span class="bait-value"></span><kbd>R</kbd></button>
+            <div class="chip clock"><span class="chip-icon clock-icon"></span><span class="clock-value"></span><span class="weather-icon"></span></div>
           </div>
         </div>
       `),
@@ -94,6 +95,20 @@ export class Hud {
     btn.classList.remove('bump');
     void btn.offsetWidth; // restart the animation
     btn.classList.add('bump');
+  }
+
+  setClock(time, weather) {
+    this.clockIcon ??= this.root.querySelector('.clock-icon');
+    this.clockValue ??= this.root.querySelector('.clock-value');
+    this.weatherIcon ??= this.root.querySelector('.weather-icon');
+    const label = time.label;
+    if (label === this.lastClock && weather.state === this.lastWeather) return;
+    this.lastClock = label;
+    this.lastWeather = weather.state;
+    this.clockIcon.textContent = time.icon;
+    this.clockValue.textContent = label;
+    this.weatherIcon.textContent = weather.info.icon;
+    this.weatherIcon.title = weather.info.label;
   }
 
   setControlsVisible(visible) {

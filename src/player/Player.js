@@ -22,13 +22,12 @@ export class Player {
     this.world = world;
     this.model = createCharacterModel();
     this.object = this.model.root;
-    this.object.position.copy(spawn);
     scene.add(this.object);
 
     this.setRod();
 
     this.velocity = new THREE.Vector2();
-    this.facing = 0; // facing the camera on spawn
+    this.teleport(world, spawn);
     this.walkCycle = 0;
     this.time = 0;
 
@@ -39,6 +38,14 @@ export class Player {
     this.armAngles = { right: POSES.idle.right, left: 0 };
     this.onStep = null; // called with no args on each footfall
     this.lastStepPhase = 0;
+  }
+
+  // Place the player in a (possibly new) world at a spawn point { x, z, facing }.
+  teleport(world, spawn) {
+    this.world = world;
+    this.object.position.set(spawn.x, world.getWalkHeight(spawn.x, spawn.z) ?? 0, spawn.z);
+    this.facing = spawn.facing ?? 0;
+    this.velocity.set(0, 0);
   }
 
   // The rod lives in the right hand (arms[0] is the character's right).

@@ -5,12 +5,16 @@ import { Input } from './core/Input.js';
 import { Settings } from './core/Settings.js';
 import { clamp } from './core/math.js';
 import { World } from './world/World.js';
-import { inlandDistance } from './world/island.js';
+import { ZONES_BY_ID } from './world/zones/index.js';
 import { createLighting } from './world/lighting.js';
 import { Player } from './player/Player.js';
 import { CameraRig } from './camera/CameraRig.js';
 import { CAMERA } from './config.js';
 import { Audio } from './audio/Audio.js';
+import { TimeOfDay, HOUR_SECONDS } from './environment/TimeOfDay.js';
+import { Weather } from './environment/Weather.js';
+import { Sky } from './environment/Sky.js';
+import { Rain } from './environment/Rain.js';
 import { FishingSystem } from './fishing/FishingSystem.js';
 import { Collection } from './collection/Collection.js';
 import { PlayerState } from './economy/PlayerState.js';
@@ -22,6 +26,8 @@ import { BucketPanel } from './ui/BucketPanel.js';
 import { JournalPanel } from './ui/JournalPanel.js';
 import { PausePanel } from './ui/PausePanel.js';
 import { ShopPanel } from './ui/ShopPanel.js';
+import { TravelPanel } from './ui/TravelPanel.js';
+import { el } from './ui/format.js';
 import { InteractPrompt } from './ui/InteractPrompt.js';
 import { DialogBox } from './ui/DialogBox.js';
 import { TitleScreen } from './ui/TitleScreen.js';
@@ -42,7 +48,11 @@ export class Game {
     this.input = new Input();
     this.audio = new Audio(this.settings);
     this.lighting = createLighting(this.scene);
-    this.world = new World(this.scene);
+    this.time = new TimeOfDay(9);
+    this.weather = new Weather();
+    this.sky = new Sky(this.lighting, this.scene);
+    this.rain = new Rain(this.scene);
+    this.world = new World(this.scene, ZONES_BY_ID.sunny);
     this.player = new Player(this.scene, this.world, this.world.spawn);
     this.player.onStep = () => this.audio.play('step', { surface: this.surfaceUnderPlayer() }, 0.12);
     this.cameraRig = new CameraRig(window.innerWidth / window.innerHeight);
@@ -66,6 +76,11 @@ export class Game {
     this.fishing.audio = this.audio;
     this.fishing.onCatch = (c) => this.collection.addCatch(c);
     this.fishing.getRod = () => this.state.rod;
+    this.fishing.getConditions = () => ({
+      zone: this.world.zone.id,
+      night: this.time.isNight,
+      raining: this.weather.isRaining,
+    });
     this.fishing.useBait = () => {
       const { bait, ranOut } = this.state.useBait();
       if (ranOut) this.toast(`That was your last ${bait.name}!`);
@@ -104,6 +119,10 @@ export class Game {
       'pause',
       new PausePanel(this.settings, () => this.panels.close(), () => this.audio.play('click', {}, 0.1)),
     );
+    this.panels.register(
+      'travel',
+      new TravelPanel(this.collection.journal, () => this.world.zone.id, (id) => this.travelTo(id)),
+    );
     this.panels.onOpen = () => this.audio.play('open');
     this.panels.onClose = () => this.audio.play('close');
 
@@ -120,6 +139,9 @@ export class Game {
     };
     this.metMarina = false;
     this.zoneBanner = new ZoneBanner(hudRoot);
+    this.fade = el('<div class="fade"></div>');
+    hudRoot.appendChild(this.fade);
+    this.traveling = false;
 
     // Soft click on every UI button.
     hudRoot.addEventListener('click', (e) => e.target.closest('button') && this.audio.play('click'));
@@ -162,7 +184,7 @@ export class Game {
     const dt = Math.min(this.timer.getDelta(), 1 / 20);
 
     if (this.started) this.handleMenuKeys();
-    this.input.enabled = this.started && !this.panels.isOpen && !this.dialog.isOpen;
+    this.input.enabled = this.started && !this.panels.isOpen && !this.dialog.isOpen && !this.traveling;
     this.dialog.update(dt, this.input);
     this.hudRoot.classList.toggle('dialog-open', this.dialog.isOpen);
 
@@ -172,15 +194,27 @@ export class Game {
       this.player.update(dt, this.input, this.cameraRig.yaw);
       this.fishing.update(dt, this.input, this.cameraRig);
       this.cameraRig.update(dt, this.input, this.fishing.getCameraFocus(this.cameraFocus));
-      this.lighting.follow(this.cameraRig.target);
-      this.world.update(this.elapsed, dt, this.player.position);
-      this.audio.update(this.shoreProximity());
+      this.updateEnvironment(dt);
     }
     this.updateInteraction();
     this.hud.update(dt, this.input);
 
     this.renderer.render(this.scene, this.cameraRig.camera);
     this.input.endFrame();
+  }
+
+  updateEnvironment(dt) {
+    // The clock only runs once you've started playing.
+    if (this.started) this.time.update(dt);
+    this.weather.update(dt, this.started ? dt / HOUR_SECONDS : 0);
+    const night = this.time.night;
+    this.sky.update(this.time, this.weather, night);
+    this.lighting.follow(this.cameraRig.target);
+    this.world.water.foamColor.setScalar(this.sky.brightness);
+    this.world.update(this.elapsed, dt, this.player.position, night);
+    this.rain.update(dt, this.weather.rain, this.cameraRig.target, (x, z) => this.fishing.isFishableWater(x, z, 0.1));
+    this.audio.update(this.shoreProximity(), { night, rain: this.weather.rain, waves: this.world.zone.ambience.waves });
+    this.hud.setClock(this.time, this.weather);
   }
 
   handleMenuKeys() {
@@ -225,6 +259,7 @@ export class Game {
       this.prompt.hide();
       this.audio.play('open');
       if (target.npc === 'marina') this.talkToMarina();
+      else if (target.travel) this.panels.open('travel');
       else this.dialog.open(target.dialog);
     }
   }
@@ -248,17 +283,39 @@ export class Game {
     this.dialog.open({ name: 'Marina', pages });
   }
 
+  // Fade out, swap the loaded zone, fade back in with the area banner.
+  async travelTo(zoneId) {
+    if (this.traveling || zoneId === this.world.zone.id) return;
+    this.traveling = true;
+    this.panels.close();
+    this.audio.play('travel');
+    this.fade.classList.add('visible');
+    await new Promise((r) => setTimeout(r, 700));
+
+    this.fishing.reset();
+    this.world.dispose();
+    this.world = new World(this.scene, ZONES_BY_ID[zoneId]);
+    this.fishing.world = this.world;
+    this.player.teleport(this.world, this.world.spawn);
+    this.cameraRig.snapTo(this.player.position);
+
+    await new Promise((r) => setTimeout(r, 300));
+    this.fade.classList.remove('visible');
+    this.zoneBanner.show(this.world.zone);
+    this.traveling = false;
+  }
+
   surfaceUnderPlayer() {
     const { x, z } = this.player.position;
     if (this.world.isOnDock(x, z)) return 'wood';
-    return inlandDistance(x, z) < 4 ? 'sand' : 'grass';
+    return this.world.island.inlandDistance(x, z) < 4 ? 'sand' : 'grass';
   }
 
   // 1 at the water's edge (or on the dock), fading to 0 well inland.
   shoreProximity() {
     const { x, z } = this.player.position;
     if (this.world.isOnDock(x, z)) return 1;
-    return clamp(1 - inlandDistance(x, z) / 14, 0, 1);
+    return clamp(1 - this.world.island.inlandDistance(x, z) / 14, 0, 1);
   }
 
   applySettings() {

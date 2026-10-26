@@ -11,8 +11,7 @@ export const DOCK = {
   deckHeight: 0.42,
 };
 
-export function createDock(rng) {
-  const { length, width, deckHeight } = DOCK;
+export function createDock(rng, { length, width, deckHeight } = DOCK) {
   const g = new THREE.Group();
   const plankW = 0.5;
   const count = Math.floor(length / (plankW + 0.05));

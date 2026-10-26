@@ -14,12 +14,23 @@ const BODY = {
   ray: [1.0, 0.22, 1.7],
   sword: [1.7, 0.8, 0.55],
   angler: [1.25, 1.05, 0.95],
+  slim: [2.4, 0.6, 0.5],
+  catfish: [1.8, 0.72, 0.7],
 };
 
 // Big species would be enormous at true scale; tone them down for display.
-const DISPLAY = { long: 0.55, ray: 0.6, sword: 0.6 };
+const DISPLAY = { long: 0.55, ray: 0.6, sword: 0.6, slim: 0.65, catfish: 0.85 };
 
 const vertexColorMat = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.6 });
+// Ghostly species glow softly and are a little see-through.
+const glowMat = new THREE.MeshStandardMaterial({
+  vertexColors: true,
+  flatShading: true,
+  emissive: 0xbfe6ff,
+  emissiveIntensity: 0.6,
+  transparent: true,
+  opacity: 0.85,
+});
 
 export function createFishModel(species, sizeCm) {
   const g = new THREE.Group();
@@ -28,7 +39,7 @@ export function createFishModel(species, sizeCm) {
   const halfLen = 0.3 * sx;
   const halfH = 0.3 * sy;
 
-  g.add(part(createBody(species, sx, sy, sz), vertexColorMat));
+  g.add(part(createBody(species, sx, sy, sz), species.glow ? glowMat : vertexColorMat));
 
   const finMat = flatMat(species.fin);
   const thinCone = (r, h, sides = 4) => new THREE.ConeGeometry(r, h, sides);
@@ -87,6 +98,18 @@ export function createFishModel(species, sizeCm) {
       spike.position.set(n.x * 0.3 * sx, n.y * 0.3 * sy, n.z * 0.3 * sz);
       spike.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), n);
       g.add(spike);
+    }
+  }
+  if (shape === 'catfish') {
+    // Whiskers.
+    for (const side of [-1, 1]) {
+      for (const tilt of [0.25, -0.35]) {
+        const w = part(new THREE.CylinderGeometry(0.008, 0.012, 0.42, 3), flatMat(species.fin));
+        w.position.set(halfLen + 0.05, -0.02, side * 0.12);
+        w.rotation.set(side * 0.6, 0, Math.PI / 2 + tilt);
+        w.translateY(0.18);
+        g.add(w);
+      }
     }
   }
   if (shape === 'sword') {

@@ -7,7 +7,6 @@
 import * as THREE from 'three';
 import { WORLD } from '../config.js';
 import { clamp, damp, lerp } from '../core/math.js';
-import { groundHeight } from '../world/island.js';
 import { waveHeight } from '../world/water.js';
 import { createBobber } from './Bobber.js';
 import { FishingLine } from './FishingLine.js';
@@ -74,12 +73,27 @@ export class FishingSystem {
     // Set by the game: consumes one bait when a cast lands, returns the bait used.
     this.useBait = () => ({ bite: 1, rare: 0, legendary: 0 });
     this.bait = { bite: 1, rare: 0, legendary: 0 };
+    // Set by the game: { zone, night, raining } decides which fish are out.
+    this.getConditions = () => ({ zone: 'sunny', night: false, raining: false });
 
     this.aim = createAimMarker();
     scene.add(this.aim.object);
 
     this._tmp = new THREE.Vector3();
     this._screen = new THREE.Vector3();
+  }
+
+  // Drop whatever is happening (used when changing zones).
+  reset() {
+    this.ui.setPower(null);
+    this.ui.setAim(null);
+    this.ui.setBite(false);
+    this.ui.setReel(null);
+    this.ui.hideCatch();
+    this.aim.hide();
+    if (this.fish) this.scene.remove(this.fish.object);
+    this.fish = null;
+    this.setState('idle');
   }
 
   get isFishing() {
@@ -156,9 +170,9 @@ export class FishingSystem {
   updateAim() {
     const { x, z } = this.castTarget();
     const ok = this.isFishableWater(x, z);
-    const y = ok ? WORLD.waterLevel + waveHeight(x, z, this.time) : (this.world.getWalkHeight(x, z) ?? groundHeight(x, z));
+    const y = ok ? WORLD.waterLevel + waveHeight(x, z, this.time) : (this.world.getWalkHeight(x, z) ?? this.world.island.groundHeight(x, z));
     this.aim.show(x, y + 0.05, z, ok, this.time);
-    const depth = WORLD.waterLevel - groundHeight(x, z);
+    const depth = WORLD.waterLevel - this.world.island.groundHeight(x, z);
     this.ui.setAim(ok ? habitatForDepth(depth).label : 'Land', ok);
   }
 
@@ -166,7 +180,7 @@ export class FishingSystem {
     const { x: tx, z: tz } = this.castTarget();
 
     this.castValid = this.isFishableWater(tx, tz);
-    const ty = this.castValid ? WORLD.waterLevel : (this.world.getWalkHeight(tx, tz) ?? groundHeight(tx, tz));
+    const ty = this.castValid ? WORLD.waterLevel : (this.world.getWalkHeight(tx, tz) ?? this.world.island.groundHeight(tx, tz));
     this.castFrom.copy(this.bobber.position);
     this.castTo.set(tx, ty, tz);
     this.flightTime = 0.45 + this.power * 0.35;
@@ -199,7 +213,8 @@ export class FishingSystem {
 
   startWaiting() {
     this.bait = this.useBait();
-    this.biteAt = lerp(TUNING.waitTime[0], TUNING.waitTime[1], Math.random()) * this.bait.bite;
+    const rainBonus = this.getConditions().raining ? 0.8 : 1; // fish are livelier in the rain
+    this.biteAt = lerp(TUNING.waitTime[0], TUNING.waitTime[1], Math.random()) * this.bait.bite * rainBonus;
     // A few nibbles before the real bite keep you watching the bobber.
     const count = Math.floor(Math.random() * 4);
     this.nibbles = Array.from({ length: count }, () => lerp(0.8, this.biteAt - 0.5, Math.random())).sort((a, b) => a - b);
@@ -258,11 +273,12 @@ export class FishingSystem {
 
   startReeling() {
     const { x, z } = this.castTo;
-    const depth = Math.max(0, WORLD.waterLevel - groundHeight(x, z));
+    const depth = Math.max(0, WORLD.waterLevel - this.world.island.groundHeight(x, z));
     const depthBonus = clamp((depth - 1.5) / 1.5, 0, 1);
     this.catch = rollFish(habitatForDepth(depth), {
       rareBoost: depthBonus + this.getRod().luck + this.bait.rare,
       legendaryBoost: this.bait.legendary,
+      conditions: this.getConditions(),
     });
     this.hookPoint.set(x, WORLD.waterLevel, z);
     this.reel = {
@@ -410,7 +426,7 @@ export class FishingSystem {
   // ---------- helpers ----------
 
   isFishableWater(x, z, minDepth = 0.25) {
-    return groundHeight(x, z) < WORLD.waterLevel - minDepth && !this.world.isOnDock(x, z);
+    return this.world.island.groundHeight(x, z) < WORLD.waterLevel - minDepth && !this.world.isOnDock(x, z);
   }
 
   moveRequested(input) {

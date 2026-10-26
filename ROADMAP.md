@@ -33,7 +33,7 @@ Each milestone should leave the game in a playable, polished state.
 - [x] Journal: every species with silhouettes + habitat tips until discovered, then catch count and records
 - [x] Catch card badges: NEW! and New record!, weight, journal note
 - [x] HUD buttons (B / J), menus pause gameplay and only open between casts
-- [ ] Time-of-day / weather conditions for fish (needs the day/night cycle, Milestone 6)
+- [x] Time-of-day / weather conditions for fish (done in Milestone 6)
 
 ## ✅ Milestone 4: UI & feel (done)
 - [x] Title screen ("click to start", also unlocks audio) with a slow camera orbit
@@ -54,10 +54,16 @@ Each milestone should leave the game in a playable, polished state.
 - [x] 6 hats (bucket, straw, beanie, captain, fish, crown), shown on the player
 - [x] Character model reworked for NPCs: looks, hair, swappable hats
 
-## Milestone 6: World expansion
-- [ ] More areas (forest lake, river, pier town...) and travel between them
-- [ ] Day / night cycle, weather
-- [ ] Zone-specific fish
+## ✅ Milestone 6: World expansion (done)
+- [x] Zone architecture: `Island` shape class + data-driven zone definitions (`world/zones/`)
+- [x] Pine Lake: an inverted "island" (lake in a forested valley) with jetty, campsite, campfire, tent
+- [x] Travel: rowboat at each dock, travel menu with per-zone discovery counts, fade transition
+- [x] 8 new freshwater fish (24 total); fish tied to zones, some only at night or in the rain
+- [x] Day/night cycle (12-minute day): keyframed sun/moon, sky and fog; HUD clock
+- [x] Night life: lamp posts, glowing hut window, flickering campfire light, fireflies, crickets, softer music
+- [x] Weather: clear / cloudy / rain with rain streaks, water ripples, rain ambience, darker light; rain makes fish bite sooner
+- [x] Static prop batching: ~700 draw calls down to ~150-200 per frame
+- [ ] More zones (river, pier town...): add a file in `world/zones/` and list it in `zones/index.js`
 
 ## Milestone 7: Life & juice
 - [ ] Ambient life: birds, fish shadows in the water, crabs on the beach

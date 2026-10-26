@@ -27,12 +27,9 @@ export const PALETTE = {
   flowers: [0xffffff, 0xffd84d, 0xff8fb1, 0xb58cff],
 };
 
+// Zone shapes, sizes and seeds live in world/zones/*.js.
 export const WORLD = {
   waterLevel: 0,
-  islandRadius: 24,
-  terrainSize: 160, // size of the generated terrain square (world units)
-  terrainSegments: 200,
-  seed: 1337,
 };
 
 export const PLAYER = {

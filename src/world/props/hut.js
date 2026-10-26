@@ -22,7 +22,9 @@ export function createHut() {
 
   // Door + round window on the front (+Z).
   g.add(part(new THREE.BoxGeometry(0.9, 1.6, 0.08), flatMat(0x5e3a22), -0.8, 0.3 + 0.8, d / 2 + 0.03));
-  const win = part(new THREE.CylinderGeometry(0.38, 0.38, 0.1, 10), flatMat(0x3d7fa6), 0.8, 1.7, d / 2 + 0.03);
+  // Own material (not the shared cache) so the window can glow at night.
+  const windowMaterial = new THREE.MeshStandardMaterial({ color: 0x3d7fa6, flatShading: true, roughness: 0.4 });
+  const win = part(new THREE.CylinderGeometry(0.38, 0.38, 0.1, 10), windowMaterial, 0.8, 1.7, d / 2 + 0.03);
   win.rotation.x = Math.PI / 2;
   const rim = part(new THREE.TorusGeometry(0.4, 0.07, 4, 10), flatMat(0xe8eef0), 0.8, 1.7, d / 2 + 0.07);
   g.add(win, rim);
@@ -44,5 +46,5 @@ export function createHut() {
   g.add(part(new THREE.CylinderGeometry(0.25, 0.2, 0.4, 8), flatMat(0x4aa3df), 1.6, 0.5, d / 2 + 0.6));
   g.add(part(new THREE.CylinderGeometry(0.25, 0.2, 0.4, 8), flatMat(0xf4f4f4), 1.0, 0.5, d / 2 + 0.75));
 
-  return { object: g, halfW: (w + 1.2) / 2, halfD: (d + 1.6) / 2, offsetZ: 0.4 };
+  return { object: g, halfW: (w + 1.2) / 2, halfD: (d + 1.6) / 2, offsetZ: 0.4, windowMaterial };
 }

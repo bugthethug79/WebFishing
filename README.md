@@ -42,14 +42,16 @@ src/
   camera/            top-down follow camera
   player/            player model + controller
   fishing/           fishing state machine, rod, bobber, line, effects, placeholder fish
+  environment/       time of day, weather, sky lighting, rain
   world/
-    island.js        pure functions describing the island's shape (shared by visuals + gameplay)
+    Island.js        a zone's landmass as pure functions (shared by visuals + gameplay)
+    zones/           zone definitions (Sunny Isle, Pine Lake) and the zone list
     terrain.js       faceted terrain mesh
     water.js         animated water + shoreline foam
     lighting.js      sun, sky, fog
     Colliders.js     simple 2D circle / box collision
-    World.js         assembles the island and answers "can I stand here?"
-    props/           dock, hut, trees, rocks, decor
+    World.js         builds a zone and answers "can I stand here?"; batches static props
+    props/           dock, hut, trees, rocks, decor, forest, harbor (lamps, rowboats)
   ui/                DOM HUD overlay + fishing widgets
 ```
 
@@ -58,3 +60,12 @@ src/
 `.github/workflows/deploy.yml` builds and deploys on every push to `main` (or the dev branch).
 One-time setup: **Settings → Pages → Build and deployment → Source: GitHub Actions**.
 The game is then served at `https://<user>.github.io/WebFishing/`.
+
+## Debugging from the browser console
+
+```js
+game.time.set(21)          // jump to 9 PM
+game.weather.set('rain')   // 'clear' | 'cloudy' | 'rain'
+game.travelTo('pine')      // 'sunny' | 'pine'
+game.state.earn(1000)      // pocket money for testing the shop
+```
