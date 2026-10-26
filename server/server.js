@@ -16,6 +16,7 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const readline = require('node:readline');
+const { spawn } = require('node:child_process');
 
 const VERSION = '1.0.0';
 const PROTOCOL = 1; // bump when messages change incompatibly; the game checks it
@@ -39,6 +40,10 @@ const DEFAULT_CONFIG = {
   admins: [],
   allowedOrigins: [],
   tls: { cert: '', key: '' },
+  // Cloudflare Tunnel: a secure wss:// address without certificates or port forwarding.
+  // enabled + no token: free random *.trycloudflare.com address (changes on restart).
+  // token: a permanent tunnel on your own domain (see README).
+  tunnel: { enabled: false, token: '' },
   chat: { enabled: true, maxLength: 200, messagesPerWindow: 5, windowSeconds: 5, blockedWords: [] },
   dataDir: 'data',
 };
@@ -57,6 +62,10 @@ function loadConfig() {
   const config = { ...DEFAULT_CONFIG, ...raw };
   config.chat = { ...DEFAULT_CONFIG.chat, ...(raw.chat ?? {}) };
   config.tls = { ...DEFAULT_CONFIG.tls, ...(raw.tls ?? {}) };
+  config.tunnel = { ...DEFAULT_CONFIG.tunnel, ...(raw.tunnel ?? {}) };
+  // Panel hosts (Pterodactyl / bot-hosting.net) and PaaS hosts pick the port for you.
+  const envPort = Number(process.env.SERVER_PORT || process.env.PORT);
+  if (envPort) config.port = envPort;
   if (!config.public && !String(config.passcode).trim()) {
     fatal('This server is set to private ("public": false) but has no "passcode". Set one in config.json.');
   }
@@ -656,12 +665,129 @@ function escapeRegex(s) {
 }
 
 // ---------------------------------------------------------------------------
+// Cloudflare Tunnel (optional): runs `cloudflared`, downloading it on first use
+// ---------------------------------------------------------------------------
+
+const CLOUDFLARED_ASSETS = {
+  'linux-x64': 'cloudflared-linux-amd64',
+  'linux-arm64': 'cloudflared-linux-arm64',
+  'linux-arm': 'cloudflared-linux-arm',
+  'win32-x64': 'cloudflared-windows-amd64.exe',
+};
+
+function download(url, dest, redirects = 5) {
+  return new Promise((resolve, reject) => {
+    https
+      .get(url, { headers: { 'User-Agent': 'webfishing-server' } }, (res) => {
+        if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location && redirects > 0) {
+          res.resume();
+          return resolve(download(new URL(res.headers.location, url).toString(), dest, redirects - 1));
+        }
+        if (res.statusCode !== 200) {
+          res.resume();
+          return reject(new Error(`HTTP ${res.statusCode}`));
+        }
+        const tmp = `${dest}.part`;
+        const file = fs.createWriteStream(tmp);
+        res.pipe(file);
+        file.on('finish', () => file.close(() => {
+          fs.renameSync(tmp, dest);
+          resolve();
+        }));
+        file.on('error', reject);
+      })
+      .on('error', reject);
+  });
+}
+
+// Find cloudflared: an explicit path, one on PATH, or download the official release.
+async function findCloudflared(dataDir) {
+  if (process.env.CLOUDFLARED_PATH) return process.env.CLOUDFLARED_PATH;
+  const onPath = await new Promise((resolve) => {
+    const p = spawn('cloudflared', ['--version'], { stdio: 'ignore' });
+    p.on('error', () => resolve(false));
+    p.on('exit', (code) => resolve(code === 0));
+  });
+  if (onPath) return 'cloudflared';
+
+  const asset = CLOUDFLARED_ASSETS[`${process.platform}-${process.arch}`];
+  if (!asset) throw new Error(`No automatic download for ${process.platform}/${process.arch}. Install cloudflared yourself (https://github.com/cloudflare/cloudflared).`);
+  const binDir = path.join(path.resolve(__dirname, dataDir), 'bin');
+  const bin = path.join(binDir, asset);
+  if (!fs.existsSync(bin)) {
+    fs.mkdirSync(binDir, { recursive: true });
+    log('Downloading cloudflared (one time, ~40 MB)...');
+    await download(`https://github.com/cloudflare/cloudflared/releases/latest/download/${asset}`, bin);
+    fs.chmodSync(bin, 0o755);
+  }
+  return bin;
+}
+
+// Starts the tunnel and keeps it running. onAddress(host) fires when a quick tunnel gets its address.
+async function startTunnel(config, onAddress) {
+  let bin;
+  try {
+    bin = await findCloudflared(config.dataDir);
+  } catch (e) {
+    log(`✖ Tunnel: could not get cloudflared (${e.message}). Players can still join on this machine via localhost.`);
+    return { stop() {} };
+  }
+  const local = `${config.tls.cert ? 'https' : 'http'}://localhost:${config.port}`;
+  const args = config.tunnel.token
+    ? ['tunnel', '--no-autoupdate', 'run', '--token', config.tunnel.token]
+    : ['tunnel', '--no-autoupdate', '--url', local, ...(config.tls.cert ? ['--no-tls-verify'] : [])];
+  let child = null;
+  let stopped = false;
+  let delay = 2000;
+
+  const run = () => {
+    log(config.tunnel.token ? 'Starting your Cloudflare Tunnel...' : 'Starting a free Cloudflare quick tunnel...');
+    child = spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    let announced = false;
+    const onOutput = (chunk) => {
+      const text = String(chunk);
+      const quick = text.match(/https:\/\/([a-z0-9-]+\.trycloudflare\.com)/i);
+      if (quick && !announced) {
+        announced = true;
+        delay = 2000;
+        onAddress(quick[1]);
+      }
+      if (config.tunnel.token && !announced && /Registered tunnel connection/i.test(text)) {
+        announced = true;
+        delay = 2000;
+        log('✔ Tunnel connected. Players join with the hostname you set in the Cloudflare dashboard.');
+      }
+      if (/ERR|error/.test(text) && !/Retrying|retry/i.test(text)) {
+        for (const line of text.split('\n')) if (/ERR/.test(line)) log(`tunnel: ${line.replace(/^\S+\s+/, '').trim()}`);
+      }
+    };
+    child.stdout.on('data', onOutput);
+    child.stderr.on('data', onOutput);
+    child.on('error', (e) => log(`✖ Tunnel failed to start: ${e.message}`));
+    child.on('exit', (code) => {
+      if (stopped) return;
+      log(`Tunnel stopped (code ${code}). Restarting in ${Math.round(delay / 1000)}s...`);
+      setTimeout(run, delay);
+      delay = Math.min(delay * 2, 60000);
+    });
+  };
+  run();
+
+  return {
+    stop() {
+      stopped = true;
+      child?.kill();
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Console commands for the server owner
 // ---------------------------------------------------------------------------
 
 function startConsole(game, store, shutdown) {
   const rl = readline.createInterface({ input: process.stdin });
-  const help = 'Commands: list, say <text>, kick <name>, ban <name>, unban <name>, op <name>, deop <name>, save, stop';
+  const help = 'Commands: list, address, say <text>, kick <name>, ban <name>, unban <name>, op <name>, deop <name>, save, stop';
   rl.on('line', (line) => {
     const [cmd, ...rest] = line.trim().split(' ');
     const arg = rest.join(' ').trim();
@@ -672,6 +798,8 @@ function startConsole(game, store, shutdown) {
         return log(help);
       case 'list':
         return log(`Online (${game.players.length}/${game.config.maxPlayers}): ${game.players.map((c) => `${c.name}${c.admin ? ' (admin)' : ''} [${c.zone ?? '-'}]`).join(', ') || 'nobody'}`);
+      case 'address':
+        return log(game.publicAddress ? `Players connect with: ${game.publicAddress}` : 'No tunnel address (tunnel off, still starting, or using your own domain).');
       case 'say':
         return log(game.adminAction('say', arg));
       case 'kick':
@@ -730,8 +858,10 @@ function main() {
   server.on('upgrade', (req, socket) => handleUpgrade(req, socket, config, (ws, r) => game.connect(ws, r)));
   const beat = setInterval(() => game.heartbeat(), 30000);
 
+  let tunnel = null;
   const shutdown = () => {
     log('Shutting down...');
+    tunnel?.stop();
     clearInterval(beat);
     for (const c of game.clients.values()) c.ws.close(1001, 'Server is shutting down');
     store.flush();
@@ -750,11 +880,19 @@ function main() {
     console.log(`  Address:  ${scheme}://localhost:${config.port}${useTls ? '' : '   (use wss:// via TLS or a tunnel for players online, see README)'}`);
     console.log(`  Players:  up to ${config.maxPlayers}\n`);
     log('Type "help" for console commands.');
+    if (config.tunnel.enabled) {
+      startTunnel(config, (host) => {
+        game.publicAddress = host;
+        console.log(`\n  ✔ Secure address ready. Players add this in Multiplayer:\n\n      ${host}\n`);
+        console.log('  (Free quick tunnels get a new address each restart. See README for a permanent one.)\n');
+      }).then((t) => (tunnel = t));
+    }
   });
 
-  if (process.stdin.isTTY || process.env.WEBFISHING_CONSOLE) startConsole(game, store, shutdown);
+  // Works in a terminal and in hosting panel consoles (which pipe stdin rather than use a TTY).
+  startConsole(game, store, shutdown);
   return { server, game, store, shutdown };
 }
 
 if (require.main === module) main();
-module.exports = { main, PROTOCOL, VERSION };
+module.exports = { main, PROTOCOL, VERSION, findCloudflared };
