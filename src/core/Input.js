@@ -1,19 +1,38 @@
-// Keyboard + mouse wheel state. Systems read from this each frame
+// Keyboard + mouse state. Systems read from this each frame
 // instead of registering their own listeners.
+
+const ACTION = ['Space', 'Mouse0']; // the one "do the thing" button: cast, hook, reel
 
 export class Input {
   constructor(target = window) {
     this.down = new Set();
-    this.pressed = new Set(); // keys pressed this frame only
+    this.pressed = new Set(); // went down this frame
+    this.released = new Set(); // went up this frame
     this.wheel = 0;
 
+    const press = (code) => {
+      if (this.down.has(code)) return;
+      this.down.add(code);
+      this.pressed.add(code);
+    };
+    const release = (code) => {
+      if (!this.down.has(code)) return;
+      this.down.delete(code);
+      this.released.add(code);
+    };
+
     target.addEventListener('keydown', (e) => {
-      if (e.repeat) return;
-      this.down.add(e.code);
-      this.pressed.add(e.code);
+      if (e.code === 'Space') e.preventDefault();
+      if (!e.repeat) press(e.code);
     });
-    target.addEventListener('keyup', (e) => this.down.delete(e.code));
-    target.addEventListener('blur', () => this.down.clear());
+    target.addEventListener('keyup', (e) => release(e.code));
+    target.addEventListener('pointerdown', (e) => e.button === 0 && press('Mouse0'));
+    target.addEventListener('pointerup', (e) => e.button === 0 && release('Mouse0'));
+    target.addEventListener('contextmenu', (e) => e.preventDefault());
+    target.addEventListener('blur', () => {
+      for (const code of this.down) this.released.add(code);
+      this.down.clear();
+    });
     target.addEventListener(
       'wheel',
       (e) => {
@@ -30,6 +49,22 @@ export class Input {
 
   wasPressed(...codes) {
     return codes.some((c) => this.pressed.has(c));
+  }
+
+  wasReleased(...codes) {
+    return codes.some((c) => this.released.has(c));
+  }
+
+  get actionDown() {
+    return this.isDown(...ACTION);
+  }
+
+  get actionPressed() {
+    return this.wasPressed(...ACTION);
+  }
+
+  get actionReleased() {
+    return this.wasReleased(...ACTION) && !this.actionDown;
   }
 
   // Movement axes in camera space: x = right, y = forward.
@@ -53,5 +88,6 @@ export class Input {
   // Call at the end of each frame.
   endFrame() {
     this.pressed.clear();
+    this.released.clear();
   }
 }

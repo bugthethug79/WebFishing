@@ -7,6 +7,8 @@ import { createLighting } from './world/lighting.js';
 import { Player } from './player/Player.js';
 import { CameraRig } from './camera/CameraRig.js';
 import { Hud } from './ui/Hud.js';
+import { FishingUI } from './ui/FishingUI.js';
+import { FishingSystem } from './fishing/FishingSystem.js';
 
 export class Game {
   constructor(container, hudRoot) {
@@ -26,6 +28,8 @@ export class Game {
     this.cameraRig = new CameraRig(window.innerWidth / window.innerHeight);
     this.cameraRig.snapTo(this.player.position);
     this.hud = new Hud(hudRoot);
+    this.fishing = new FishingSystem(this.scene, this.world, this.player, new FishingUI(hudRoot));
+    this.cameraFocus = new THREE.Vector3();
 
     this.timer = new THREE.Timer();
     this.elapsed = 0;
@@ -44,7 +48,8 @@ export class Game {
     this.elapsed += dt;
 
     this.player.update(dt, this.input, this.cameraRig.yaw);
-    this.cameraRig.update(dt, this.input, this.player.position);
+    this.fishing.update(dt, this.input, this.cameraRig);
+    this.cameraRig.update(dt, this.input, this.fishing.getCameraFocus(this.cameraFocus));
     this.lighting.follow(this.cameraRig.target);
     this.world.update(this.elapsed);
     this.hud.update(dt, this.input);

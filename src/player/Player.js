@@ -4,6 +4,18 @@ import * as THREE from 'three';
 import { PLAYER } from '../config.js';
 import { damp, angleDelta, lerp } from '../core/math.js';
 import { createPlayerModel } from './playerModel.js';
+import { createRod } from '../fishing/Rod.js';
+
+// Target shoulder angles (rotation.x) for each pose. Negative swings the arm forward;
+// around -PI the arm points straight up.
+const POSES = {
+  idle: { right: -0.45, left: 0 },
+  charge: { right: -3.3, left: -0.6 },
+  cast: { right: -1.0, left: -0.3 },
+  hold: { right: -0.95, left: -0.5 },
+  reel: { right: -0.9, left: -0.9 },
+  cheer: { right: -2.9, left: -2.9 },
+};
 
 export class Player {
   constructor(scene, world, spawn) {
@@ -13,21 +25,40 @@ export class Player {
     this.object.position.copy(spawn);
     scene.add(this.object);
 
+    // The rod lives in the right hand (arms[0] is the character's right).
+    this.rod = createRod();
+    this.rod.object.position.y = -0.44;
+    this.model.arms[0].add(this.rod.object);
+
     this.velocity = new THREE.Vector2();
     this.facing = 0; // facing the camera on spawn
     this.walkCycle = 0;
     this.time = 0;
+
+    // Set by other systems (e.g. fishing) each frame.
+    this.pose = 'idle';
+    this.canMove = true;
+    this.canTurn = true;
+    this.armAngles = { right: POSES.idle.right, left: 0 };
   }
 
   get position() {
     return this.object.position;
   }
 
+  get forward() {
+    return { x: Math.sin(this.facing), z: Math.cos(this.facing) };
+  }
+
+  getRodTip(target = new THREE.Vector3()) {
+    return this.rod.tip.getWorldPosition(target);
+  }
+
   update(dt, input, cameraYaw) {
     this.time += dt;
     const axis = input.getMoveAxis();
     const sprinting = input.isDown('ShiftLeft', 'ShiftRight');
-    const speed = sprinting ? PLAYER.sprintSpeed : PLAYER.walkSpeed;
+    const speed = this.canMove ? (sprinting ? PLAYER.sprintSpeed : PLAYER.walkSpeed) : 0;
 
     // Rotate input into world space using the camera's yaw.
     // Camera sits at +Z (yaw 0) looking toward -Z, so "forward" is -Z.
@@ -43,7 +74,7 @@ export class Player {
     this.move(dt);
 
     const moving = Math.hypot(axis.x, axis.y) > 0;
-    if (moving) {
+    if (moving && (this.canMove || this.canTurn)) {
       const target = Math.atan2(wx, wz);
       this.facing += angleDelta(this.facing, target) * damp(PLAYER.turnSpeed, dt);
     }
@@ -85,12 +116,32 @@ export class Player {
 
     legs[0].rotation.x = swing;
     legs[1].rotation.x = -swing;
-    arms[0].rotation.x = -swing * 0.8;
-    arms[1].rotation.x = swing * 0.8;
+
+    // Arms blend toward the current pose; the cast swing is snappy, the rest gentle.
+    const pose = POSES[this.pose] ?? POSES.idle;
+    const rate = this.pose === 'cast' ? 28 : this.pose === 'charge' ? 10 : 8;
+    this.armAngles.right = lerp(this.armAngles.right, pose.right, damp(rate, dt));
+    this.armAngles.left = lerp(this.armAngles.left, pose.left, damp(rate, dt));
+
+    let right = this.armAngles.right - swing * 0.3; // rod hand swings less
+    let left = this.armAngles.left + swing * 0.8;
+    if (this.pose === 'reel') {
+      // Crank the reel and jiggle the rod.
+      left += Math.sin(this.time * 18) * 0.25;
+      right += Math.sin(this.time * 31) * 0.04;
+    }
+    if (this.pose === 'cheer') {
+      const wave = Math.sin(this.time * 8) * 0.12;
+      right += wave;
+      left -= wave;
+    }
+    arms[0].rotation.x = right;
+    arms[1].rotation.x = left;
 
     const bob = Math.abs(Math.cos(this.walkCycle)) * 0.08 * moveAmount;
     const breathe = Math.sin(this.time * 2.2) * 0.015 * (1 - moveAmount);
-    body.position.y = bob + breathe;
+    const hop = this.pose === 'cheer' ? Math.abs(Math.sin(this.time * 8)) * 0.12 : 0;
+    body.position.y = bob + breathe + hop;
     body.rotation.x = 0.08 * moveAmount; // lean into the run
     head.rotation.z = Math.sin(this.walkCycle * 0.5) * 0.05 * moveAmount;
   }

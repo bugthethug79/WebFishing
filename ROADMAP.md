@@ -15,13 +15,15 @@ Each milestone should leave the game in a playable, polished state.
 - [x] Top-down follow camera: smooth follow, scroll zoom, Q/E rotate in 45° steps
 - [x] Minimal HUD (title + controls hint)
 
-## Milestone 2: Core fishing loop
-- [ ] Fishing rod held by the player
-- [ ] Cast: hold to charge power, release to throw; only valid over water
-- [ ] Line + bobber that floats on the waves
-- [ ] Waiting phase with nibbles, then a bite (bobber dips, "!" indicator)
-- [ ] Reeling minigame (tension / timing based, cozy not punishing)
-- [ ] Catch reveal: fish pops out, simple popup
+## ✅ Milestone 2: Core fishing loop (done)
+- [x] Fishing rod held by the player, with charge / cast / hold / reel / cheer poses
+- [x] Cast: hold to charge (ping-pong power meter), release to throw; aim by turning; only valid over water
+- [x] Sagging line + bobber that floats on the waves; camera drifts toward the bobber
+- [x] Waiting phase with nibbles, then a bite (bobber dips, splash, bouncing "!")
+- [x] Reeling minigame: hold to reel, watch the tension bar, fish thrashes in bursts
+- [x] Catch reveal: fish leaps out and is held overhead, catch card with rarity + size
+- [x] Ripple and splash effects; friendly messages for misses, early pulls and snapped lines
+- [x] Placeholder species table (7 fish, 4 rarities; deeper water favours rarer fish)
 
 ## Milestone 3: Fish & collection
 - [ ] Fish data: species, rarity tiers, size ranges, where/when they appear

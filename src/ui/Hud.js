@@ -8,6 +8,7 @@ export class Hud {
       <div class="hud-controls">
         <span><kbd>WASD</kbd>Move</span>
         <span><kbd>Shift</kbd>Run</span>
+        <span><kbd>Space</kbd>/<kbd>Click</kbd>Fish</span>
         <span><kbd>Q</kbd><kbd>E</kbd>Rotate</span>
         <span><kbd>Scroll</kbd>Zoom</span>
       </div>

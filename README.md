@@ -18,6 +18,7 @@ npm run build    # production build into dist/
 | --- | --- |
 | WASD / Arrows | Move |
 | Shift | Run |
+| Space / Left click | Hold to charge a cast, release to throw. Press on a bite to hook, hold to reel |
 | Q / E | Rotate camera |
 | Mouse wheel | Zoom |
 
@@ -31,6 +32,7 @@ src/
   core/              input, math helpers
   camera/            top-down follow camera
   player/            player model + controller
+  fishing/           fishing state machine, rod, bobber, line, effects, placeholder fish
   world/
     island.js        pure functions describing the island's shape (shared by visuals + gameplay)
     terrain.js       faceted terrain mesh
@@ -39,7 +41,7 @@ src/
     Colliders.js     simple 2D circle / box collision
     World.js         assembles the island and answers "can I stand here?"
     props/           dock, hut, trees, rocks, decor
-  ui/                DOM HUD overlay
+  ui/                DOM HUD overlay + fishing widgets
 ```
 
 ## Deploying to GitHub Pages
