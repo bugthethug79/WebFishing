@@ -45,6 +45,10 @@ const DEFAULT_CONFIG = {
   // token: a permanent tunnel on your own domain (see README).
   // protocol: "http2" (TCP, works on most hosts) | "quic" (UDP) | "auto".
   tunnel: { enabled: false, token: '', protocol: 'http2' },
+  // Serve the game itself from this server, so players can open http://<address>:<port>
+  // and connect without wss:// (no tunnel or certificate needed). `source` is where the
+  // published game is downloaded from on startup (a URL), or a local folder of built files.
+  webClient: { enabled: true, source: 'https://bugthethug79.github.io/WebFishing/' },
   chat: { enabled: true, maxLength: 200, messagesPerWindow: 5, windowSeconds: 5, blockedWords: [] },
   dataDir: 'data',
 };
@@ -64,6 +68,7 @@ function loadConfig() {
   config.chat = { ...DEFAULT_CONFIG.chat, ...(raw.chat ?? {}) };
   config.tls = { ...DEFAULT_CONFIG.tls, ...(raw.tls ?? {}) };
   config.tunnel = { ...DEFAULT_CONFIG.tunnel, ...(raw.tunnel ?? {}) };
+  config.webClient = { ...DEFAULT_CONFIG.webClient, ...(raw.webClient ?? {}) };
   // Panel hosts (Pterodactyl / bot-hosting.net) and PaaS hosts pick the port for you.
   const envPort = Number(process.env.SERVER_PORT || process.env.PORT);
   if (envPort) config.port = envPort;
@@ -666,6 +671,108 @@ function escapeRegex(s) {
 }
 
 // ---------------------------------------------------------------------------
+// Web client: download the published game and serve it over HTTP
+// ---------------------------------------------------------------------------
+
+const MIME = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon',
+  '.woff2': 'font/woff2',
+  '.wasm': 'application/wasm',
+  '.txt': 'text/plain; charset=utf-8',
+};
+
+// Finds the game's files referenced from index.html (and from those files), relative paths only.
+function referencedAssets(text) {
+  const found = new Set();
+  for (const m of text.matchAll(/(?:src|href)="(?:\.\/)?(assets\/[^"?#]+)"/g)) found.add(m[1]);
+  for (const m of text.matchAll(/["'(](?:\.\/|\.\.\/)?(assets\/[\w.-]+\.(?:js|css|png|svg|woff2|wasm|json))["')]/g)) found.add(m[1]);
+  return [...found];
+}
+
+// Returns the folder to serve the game from (or null). Downloads a fresh copy when `source`
+// is a URL, keeping the previous copy if the download fails.
+async function prepareWebClient(config) {
+  const { source } = config.webClient;
+  const local = !/^https?:\/\//i.test(source);
+  if (local) {
+    const dir = path.resolve(__dirname, source);
+    if (fs.existsSync(path.join(dir, 'index.html'))) return dir;
+    log(`✖ Web client: no index.html in ${dir}.`);
+    return null;
+  }
+
+  const target = path.join(path.resolve(__dirname, config.dataDir), 'game');
+  const temp = `${target}.download`;
+  const base = source.endsWith('/') ? source : `${source}/`;
+  try {
+    const get = async (url) => {
+      const res = await fetch(url, { cache: 'no-store', headers: { 'User-Agent': 'webfishing-server' } });
+      if (!res.ok) throw new Error(`${url} -> HTTP ${res.status}`);
+      return Buffer.from(await res.arrayBuffer());
+    };
+    const html = await get(base);
+    fs.rmSync(temp, { recursive: true, force: true });
+    fs.mkdirSync(path.join(temp, 'assets'), { recursive: true });
+    fs.writeFileSync(path.join(temp, 'index.html'), html);
+    const queue = referencedAssets(html.toString());
+    const done = new Set();
+    while (queue.length) {
+      const rel = queue.shift();
+      if (done.has(rel)) continue;
+      done.add(rel);
+      const body = await get(new URL(rel, base).toString());
+      fs.writeFileSync(path.join(temp, rel), body);
+      if (/\.(js|css)$/.test(rel)) queue.push(...referencedAssets(body.toString()).filter((r) => !done.has(r)));
+    }
+    fs.rmSync(target, { recursive: true, force: true });
+    fs.renameSync(temp, target);
+    log(`Game files updated from ${base} (${done.size + 1} files).`);
+  } catch (e) {
+    fs.rmSync(temp, { recursive: true, force: true });
+    if (fs.existsSync(path.join(target, 'index.html'))) {
+      log(`Web client: could not update the game (${e.message}). Using the copy from last time.`);
+    } else {
+      log(`✖ Web client: could not download the game (${e.message}). Players can still join from the game's website.`);
+      return null;
+    }
+  }
+  return target;
+}
+
+// Serves the game files; index.html gets a marker so the game knows it came from this server.
+function serveWebClient(dir, req, res) {
+  let rel;
+  try {
+    rel = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+  } catch {
+    rel = '/';
+  }
+  if (rel === '/' || rel === '') rel = '/index.html';
+  const file = path.normalize(path.join(dir, rel));
+  if (!file.startsWith(dir + path.sep) || !fs.existsSync(file) || !fs.statSync(file).isFile()) return false;
+
+  const ext = path.extname(file).toLowerCase();
+  let body = fs.readFileSync(file);
+  if (rel === '/index.html') {
+    body = Buffer.from(body.toString().replace('</head>', '  <meta name="webfishing-server" content="1" />\n  </head>'));
+  }
+  res.writeHead(200, {
+    'Content-Type': MIME[ext] ?? 'application/octet-stream',
+    // Hashed asset names never change; index.html always fetches fresh.
+    'Cache-Control': rel === '/index.html' ? 'no-cache' : 'public, max-age=31536000, immutable',
+  });
+  res.end(req.method === 'HEAD' ? undefined : body);
+  return true;
+}
+
+// ---------------------------------------------------------------------------
 // Cloudflare Tunnel (optional): runs `cloudflared`, downloading it on first use
 // ---------------------------------------------------------------------------
 
@@ -859,11 +966,17 @@ function main() {
   const store = new Store(config.dataDir);
   const game = new GameServer(config, store);
 
-  // A plain web page at the server address, handy for checking it's up.
+  // HTTP: the game itself (if enabled), plus /api/info for checking the server is up.
+  let webDir = null;
   const onRequest = (req, res) => {
-    const info = game.info();
-    res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
-    res.end(JSON.stringify({ ...info, hint: 'This is a WebFishing server. Add its address in the game under Multiplayer.' }, null, 2));
+    const url = req.url ?? '/';
+    if ((req.method === 'GET' || req.method === 'HEAD') && webDir && !url.startsWith('/api/') && serveWebClient(webDir, req, res)) return;
+    if (url.startsWith('/api/info') || !webDir) {
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      return res.end(JSON.stringify({ ...game.info(), hint: 'This is a WebFishing server. Add its address in the game under Multiplayer.' }, null, 2));
+    }
+    res.writeHead(404, { 'Content-Type': 'text/plain' });
+    res.end('Not found');
   };
 
   const useTls = config.tls.cert && config.tls.key;
@@ -899,6 +1012,16 @@ function main() {
     console.log(`  Address:  ${scheme}://localhost:${config.port}${useTls ? '' : '   (use wss:// via TLS or a tunnel for players online, see README)'}`);
     console.log(`  Players:  up to ${config.maxPlayers}\n`);
     log('Type "help" for console commands.');
+    if (config.webClient.enabled) {
+      prepareWebClient(config).then((dir) => {
+        webDir = dir;
+        if (dir) {
+          console.log(`\n  ✔ The game is also served here. Players can open it in a browser at:\n`);
+          console.log(`      http://<this server's address>:${config.port}   (e.g. http://localhost:${config.port})\n`);
+          console.log('  (Plain http: fine for friends; use a tunnel or your own domain for a big public server.)\n');
+        }
+      });
+    }
     if (config.tunnel.enabled) {
       startTunnel(config, (host) => {
         game.publicAddress = host;

@@ -1,7 +1,7 @@
 // Multiplayer menu: saved servers with live status, add/remove, then log in or register.
 
 import { el } from './format.js';
-import { normalizeAddress } from '../net/protocol.js';
+import { normalizeAddress, homeServerAddress } from '../net/protocol.js';
 import { getServers, addServer, removeServer, getLogin, forgetLogin } from '../net/serverList.js';
 import { OnlineSession, probeServer } from '../net/OnlineSession.js';
 
@@ -53,7 +53,9 @@ export class ServerBrowser {
 
   renderList() {
     const list = this.el.querySelector('.sb-list');
-    const servers = getServers();
+    // Opened from a WebFishing server? Offer that server first, always.
+    const home = homeServerAddress();
+    const servers = [...(home ? [{ address: home, label: 'This server', home: true }] : []), ...getServers().filter((s) => s.address !== home)];
     if (!servers.length) {
       list.replaceChildren(
         el('<div class="sb-empty">No servers yet.<br/>Ask a friend for their server address and add it below.<br/><small>Hosting one on this computer? Add <b>localhost:8787</b>.</small></div>'),
@@ -76,10 +78,13 @@ export class ServerBrowser {
         `);
         row.querySelector('.sb-name').textContent = s.label || s.address;
         row.querySelector('.sb-address-label').textContent = s.address;
-        row.querySelector('.remove').addEventListener('click', () => {
-          removeServer(s.address);
-          this.renderList();
-        });
+        if (s.home) row.querySelector('.remove').remove();
+        else {
+          row.querySelector('.remove').addEventListener('click', () => {
+            removeServer(s.address);
+            this.renderList();
+          });
+        }
         probeServer(s.address).then((res) => {
           if (!row.isConnected) return;
           const motd = row.querySelector('.sb-motd');

@@ -33,6 +33,8 @@ Players add your server's address in the game under **Multiplayer**.
 | `tls.cert`, `tls.key` | `""` | Paths to a certificate + key to serve `wss://` directly (see below) |
 | `tunnel.enabled` | `false` | Start a Cloudflare Tunnel for a secure address automatically (see below) |
 | `tunnel.token` | `""` | Cloudflare Tunnel token for a permanent address on your own domain |
+| `webClient.enabled` | `true` | Serve the game itself, so players can open `http://<address>:<port>` and play (see below) |
+| `webClient.source` | GitHub Pages URL | Where the game is downloaded from on startup (a URL, or a local folder of built files) |
 | `tunnel.protocol` | `"http2"` | How the tunnel talks to Cloudflare: `"http2"` (TCP, works on most hosts), `"quic"` (UDP) or `"auto"` |
 | `chat.enabled` | `true` | Turn chat on/off |
 | `chat.maxLength` | `200` | Longest chat message |
@@ -52,6 +54,23 @@ Example private server:
   "admins": ["yourname"]
 }
 ```
+
+## Easiest: players open the game from your server
+
+By default the server also **serves the game**. It downloads the latest published version on
+startup (about 600 KB; if that fails it uses the copy from last time). Players open your server's
+address **in their browser**:
+
+```
+http://your-server-address:port
+```
+
+The Multiplayer menu then shows **This server** at the top: click Join. No tunnel or
+certificate needed, because a plain-http page may connect to a plain `ws://` server.
+
+Trade-offs: the connection isn't encrypted (passwords travel unprotected), which is fine among
+friends; for a big public server use a tunnel or your own domain (below). Each website keeps its
+own browser storage, so a player's solo save on GitHub Pages won't show up at your address.
 
 ## Letting players connect: `wss://` (important)
 
@@ -98,7 +117,11 @@ your router, and players add `your-domain.com:8787`.
 
 ## Hosting on bot-hosting.net (and other Pterodactyl panel hosts)
 
-Panel hosts only let you run a program, so use the built-in tunnel for a secure address.
+The quickest route on a panel host is the built-in game hosting above: once the server is
+running, players open **`http://<your panel address>:<port>`** (for example
+`http://fi12.bot-hosting.cloud:25157`, shown on the panel's *Ports* page) and join
+**This server**. Steps 1-4 below are all you need for that. For a secure `wss://` address on
+GitHub Pages as well, also turn on the tunnel (step 5).
 
 1. **Create a server** in the panel using a **Node.js** egg/template (Node 18 or newer;
    22 is best).

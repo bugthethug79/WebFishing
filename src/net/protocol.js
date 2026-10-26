@@ -2,7 +2,8 @@
 export const PROTOCOL = 1;
 
 // Turn what a player types ("localhost:8787", "fish.example.com", "wss://...") into a WebSocket URL.
-// Secure pages (like GitHub Pages) can only open wss:// connections, except to localhost.
+// Secure pages (like GitHub Pages) can only open wss:// connections, except to localhost;
+// a plain-http page (e.g. the game served by a WebFishing server) uses ws://.
 export function normalizeAddress(input) {
   let s = String(input ?? '').trim();
   if (!s) return null;
@@ -10,7 +11,8 @@ export function normalizeAddress(input) {
   if (!/^wss?:\/\//i.test(s)) {
     const host = s.split('/')[0].split(':')[0];
     const local = host === 'localhost' || host === '127.0.0.1' || host === '[::1]';
-    s = `${local ? 'ws' : 'wss'}://${s}`;
+    const securePage = typeof location !== 'undefined' && location.protocol === 'https:';
+    s = `${local || !securePage ? 'ws' : 'wss'}://${s}`;
   }
   try {
     const url = new URL(s);
@@ -19,6 +21,11 @@ export function normalizeAddress(input) {
   } catch {
     return null;
   }
+}
+
+// True when this page was served by a WebFishing server (it marks index.html).
+export function homeServerAddress() {
+  return document.querySelector('meta[name="webfishing-server"]') ? location.host : null;
 }
 
 // Human-friendly reasons for close codes the server uses.
