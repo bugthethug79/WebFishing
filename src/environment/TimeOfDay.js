@@ -1,20 +1,33 @@
-// The in-game clock. One in-game hour passes every HOUR_SECONDS real seconds.
+// The in-game clock, derived from real-world time so every player (and every
+// browser tab) sees the same time of day without needing a server.
+// One in-game hour passes every HOUR_SECONDS real seconds.
 
 import { smoothstep } from '../core/math.js';
 
 export const HOUR_SECONDS = 30; // a full day takes 12 minutes
 
 export class TimeOfDay {
-  constructor(startHour = 9) {
-    this.hours = startHour;
+  constructor() {
+    // Local offset in hours: 0 keeps you on the shared clock. Debug jumps (set) change it;
+    // a multiplayer server could also hand one out.
+    this.offset = 0;
   }
 
-  update(dt) {
-    this.hours = (this.hours + dt / HOUR_SECONDS) % 24;
+  // Hours since the shared epoch (keeps increasing; used for weather blocks).
+  get totalHours() {
+    return Date.now() / 1000 / HOUR_SECONDS + this.offset;
   }
 
+  get hours() {
+    return ((this.totalHours % 24) + 24) % 24;
+  }
+
+  // Kept for the game loop's sake; the clock reads Date.now() directly.
+  update() {}
+
+  // Debug: jump this browser's clock to a time of day.
   set(hours) {
-    this.hours = ((hours % 24) + 24) % 24;
+    this.offset += hours - this.hours;
   }
 
   // 0 in daylight, 1 in full night, smooth through dusk and dawn.
@@ -37,8 +50,9 @@ export class TimeOfDay {
   }
 
   get label() {
-    const h = Math.floor(this.hours);
-    const m = Math.floor((this.hours - h) * 6) * 10; // 10-minute steps keep the clock calm
+    const hours = this.hours;
+    const h = Math.floor(hours);
+    const m = Math.floor((hours - h) * 6) * 10; // 10-minute steps keep the clock calm
     const suffix = h < 12 ? 'AM' : 'PM';
     return `${h % 12 === 0 ? 12 : h % 12}:${String(m).padStart(2, '0')} ${suffix}`;
   }

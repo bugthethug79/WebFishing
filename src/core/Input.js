@@ -22,7 +22,10 @@ export class Input {
       this.released.add(code);
     };
 
+    // Typing in a text field (name, save code) must not move the player or open menus.
+    const typing = (e) => e.target instanceof HTMLElement && (e.target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName));
     target.addEventListener('keydown', (e) => {
+      if (typing(e)) return;
       if (e.code === 'Space') e.preventDefault();
       if (!e.repeat) press(e.code);
     });

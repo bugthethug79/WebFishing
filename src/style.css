@@ -459,7 +459,7 @@ kbd {
   font-weight: 700;
 }
 .dialog-next { position: absolute; right: 18px; bottom: 10px; font-size: 14px; opacity: 0; }
-.dialog.done .dialog-next { opacity: 0.6; animation: float 0.6s ease-in-out infinite alternate; }
+.dialog.done .dialog-next { opacity: 0.6; animation: bob 0.6s ease-in-out infinite alternate; }
 
 .title-screen {
   position: absolute;
@@ -477,7 +477,9 @@ kbd {
 }
 .title-screen.hidden { opacity: 0; pointer-events: none; }
 .title-logo { text-align: center; animation: title-in 0.8s cubic-bezier(0.34, 1.56, 0.64, 1); }
-.title-fish { display: block; font-size: 64px; animation: float 1.4s ease-in-out infinite alternate; }
+.title-fish { display: block; font-size: 64px; animation: bob 1.4s ease-in-out infinite alternate; }
+/* transform-based bob: unlike margin it doesn't reflow (and jiggle) the layout around it */
+@keyframes bob { to { transform: translateY(-6px); } }
 .title-logo h1 {
   font-size: clamp(48px, 10vw, 96px);
   font-weight: 700;
@@ -706,3 +708,78 @@ kbd {
 .species-heading span { letter-spacing: 0; text-transform: none; }
 .chip.clock { min-width: 120px; }
 .weather-icon:empty { display: none; }
+
+/* ---------- Milestone 8: title form, saves ---------- */
+
+.title-new {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 18px 22px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #2b6f8a;
+  box-shadow: 0 6px 0 rgba(43, 111, 138, 0.25);
+  cursor: default;
+}
+.title-new label { font-size: 17px; font-weight: 700; }
+.title-new input,
+.name-input,
+.import-code {
+  width: 240px;
+  padding: 8px 12px;
+  border: 2px solid #cfe6ec;
+  border-radius: 12px;
+  background: #fff;
+  color: #2b5a6e;
+  font: inherit;
+  font-size: 17px;
+  font-weight: 600;
+  text-align: center;
+  outline: none;
+}
+.title-new input:focus,
+.name-input:focus,
+.import-code:focus { border-color: #4fc3d6; }
+.title-welcome { font-size: 22px; font-weight: 600; text-shadow: 0 2px 0 rgba(43, 111, 138, 0.6); }
+
+.name-form { display: flex; gap: 8px; align-items: center; }
+.name-form .name-input { width: 0; flex: 1; text-align: left; font-size: 15px; }
+.name-form .btn, .save-actions .btn, .import-box .btn { margin-top: 0; padding: 6px 12px; font-size: 14px; }
+.save-note { margin-bottom: 8px; font-size: 13px; opacity: 0.75; }
+.save-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn.danger { color: #e0564f; }
+.btn.danger.confirm { background: #ff5a4f; color: #fff; box-shadow: 0 4px 0 #c7372e; }
+.import-box { display: flex; gap: 8px; margin-top: 8px; align-items: flex-start; }
+.import-box[hidden] { display: none; }
+.import-code { flex: 1; width: auto; font-size: 12px; text-align: left; resize: none; }
+
+.saved-indicator {
+  position: absolute;
+  right: 20px;
+  bottom: 20px;
+  padding: 5px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.85);
+  color: #2b6f8a;
+  font-size: 13px;
+  font-weight: 700;
+  opacity: 0;
+  transition: opacity 0.4s;
+}
+.saved-indicator.visible { opacity: 1; }
+
+.name-tags { position: absolute; inset: 0; pointer-events: none; }
+.name-tag {
+  position: absolute;
+  left: 0;
+  top: 0;
+  padding: 2px 10px;
+  border-radius: 10px;
+  background: rgba(20, 60, 80, 0.55);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+}

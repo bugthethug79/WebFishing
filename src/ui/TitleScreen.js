@@ -1,9 +1,12 @@
-// "Click to start" screen. Also the user gesture that unlocks audio.
+// Title screen. New players pick a name; returning players just continue.
+// Starting is also the user gesture that unlocks audio.
 
 import { el } from './format.js';
+import { NAME_MAX } from '../save/Profile.js';
 
 export class TitleScreen {
-  constructor(root, onStart) {
+  // profile: { name, isNew }. onStart(name) is called once.
+  constructor(root, profile, onStart) {
     this.el = el(`
       <div class="title-screen">
         <div class="title-logo">
@@ -11,23 +14,51 @@ export class TitleScreen {
           <h1>WebFishing</h1>
           <p>A cozy little fishing game</p>
         </div>
-        <div class="title-start">Click or press any key to start</div>
+        ${
+          profile.isNew
+            ? `<form class="title-new">
+                 <label for="title-name">What should we call you?</label>
+                 <input id="title-name" maxlength="${NAME_MAX}" placeholder="Your name" autocomplete="off" />
+                 <button class="btn" type="submit">Start fishing</button>
+               </form>`
+            : `<div class="title-welcome">Welcome back, <b></b>!</div>
+               <div class="title-start">Click or press any key to continue</div>`
+        }
       </div>
     `);
     root.appendChild(this.el);
     this.active = true;
 
-    const start = (e) => {
+    const finish = (name) => {
       if (!this.active) return;
-      if (e.type === 'keydown' && ['Tab', 'F5', 'F12'].includes(e.code)) return;
       this.active = false;
-      window.removeEventListener('pointerdown', start);
-      window.removeEventListener('keydown', start);
+      window.removeEventListener('pointerdown', onAny);
+      window.removeEventListener('keydown', onAny);
       this.el.classList.add('hidden');
       setTimeout(() => this.el.remove(), 800);
-      onStart();
+      onStart(name);
     };
-    window.addEventListener('pointerdown', start);
-    window.addEventListener('keydown', start);
+
+    if (profile.isNew) {
+      const form = this.el.querySelector('form');
+      const input = form.querySelector('input');
+      setTimeout(() => input.focus(), 300);
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        input.blur();
+        finish(input.value);
+      });
+    } else {
+      this.el.querySelector('.title-welcome b').textContent = profile.name;
+    }
+
+    // Returning players: any click or key continues.
+    const onAny = (e) => {
+      if (profile.isNew) return;
+      if (e.type === 'keydown' && ['Tab', 'F5', 'F12'].includes(e.code)) return;
+      finish(profile.name);
+    };
+    window.addEventListener('pointerdown', onAny);
+    window.addEventListener('keydown', onAny);
   }
 }

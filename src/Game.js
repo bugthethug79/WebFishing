@@ -11,7 +11,7 @@ import { Player } from './player/Player.js';
 import { CameraRig } from './camera/CameraRig.js';
 import { CAMERA } from './config.js';
 import { Audio } from './audio/Audio.js';
-import { TimeOfDay, HOUR_SECONDS } from './environment/TimeOfDay.js';
+import { TimeOfDay } from './environment/TimeOfDay.js';
 import { Weather } from './environment/Weather.js';
 import { Sky } from './environment/Sky.js';
 import { Rain } from './environment/Rain.js';
@@ -31,13 +31,19 @@ import { PausePanel } from './ui/PausePanel.js';
 import { ShopPanel } from './ui/ShopPanel.js';
 import { TravelPanel } from './ui/TravelPanel.js';
 import { el } from './ui/format.js';
+import { Profile, cleanName } from './save/Profile.js';
+import { SaveManager, encodeSave, decodeSave } from './save/SaveManager.js';
+import { LocalStorageBackend } from './save/storage.js';
+import { Multiplayer } from './net/Multiplayer.js';
+import { BroadcastClient } from './net/BroadcastClient.js';
 import { InteractPrompt } from './ui/InteractPrompt.js';
 import { DialogBox } from './ui/DialogBox.js';
 import { TitleScreen } from './ui/TitleScreen.js';
 import { ZoneBanner } from './ui/ZoneBanner.js';
 
 export class Game {
-  constructor(container, hudRoot) {
+  // saveData: an already-loaded save (or null for a new player); backend: where to save.
+  constructor(container, hudRoot, { saveData = null, backend = new LocalStorageBackend() } = {}) {
     this.settings = new Settings();
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -51,37 +57,62 @@ export class Game {
     this.input = new Input();
     this.audio = new Audio(this.settings);
     this.lighting = createLighting(this.scene);
-    this.time = new TimeOfDay(9);
+    this.time = new TimeOfDay();
     this.weather = new Weather();
     this.sky = new Sky(this.lighting, this.scene);
     this.rain = new Rain(this.scene);
     this.particles = new Particles(this.scene);
-    this.world = new World(this.scene, ZONES_BY_ID.sunny);
+
+    // Who you are and what you own, restored from the save before the world is built.
+    this.profile = new Profile();
+    this.collection = new Collection();
+    this.state = new PlayerState();
+    this.shop = new Shop(this.collection.inventory, this.state);
+    this.metMarina = false;
+    this.save = new SaveManager(backend, {
+      profile: this.profile,
+      state: this.state,
+      inventory: this.collection.inventory,
+      journal: this.collection.journal,
+      getPlayer: () => ({
+        zone: this.world.zone.id,
+        x: +this.player.position.x.toFixed(2),
+        z: +this.player.position.z.toFixed(2),
+        facing: +this.player.facing.toFixed(3),
+      }),
+      getFlags: () => ({ metMarina: this.metMarina }),
+    });
+    if (saveData) {
+      this.save.apply(saveData);
+      this.metMarina = !!saveData.flags?.metMarina;
+    }
+
+    const zone = ZONES_BY_ID[saveData?.player?.zone] ?? ZONES_BY_ID.sunny;
+    this.world = new World(this.scene, zone);
     this.hookWorld();
-    this.player = new Player(this.scene, this.world, this.world.spawn);
+    this.player = new Player(this.scene, this.world, this.savedSpawn(saveData?.player));
     this.player.onStep = () => this.onStep();
     this.cameraRig = new CameraRig(window.innerWidth / window.innerHeight);
     this.cameraRig.snapTo(this.player.position);
     this.cameraFocus = new THREE.Vector3();
 
-    // Fishing, collection and economy.
-    this.collection = new Collection();
-    this.state = new PlayerState();
-    this.shop = new Shop(this.collection.inventory, this.state);
     const fishingUI = new FishingUI(hudRoot);
     this.toast = (msg, ms) => fishingUI.toast(msg, ms);
     fishingUI.onToast = () => this.audio.play('toast');
-    this.player.setRod(this.state.rod);
+    this.player.setRod(this.state.rodId);
     this.player.setHat(this.state.hatId);
     this.state.on('change', ({ what }) => {
-      if (what === 'rod') this.player.setRod(this.state.rod);
+      if (what === 'rod') this.player.setRod(this.state.rodId);
       if (what === 'hat') this.player.setHat(this.state.hatId);
     });
     this.fishing = new FishingSystem(this.scene, this.world, this.player, fishingUI);
     this.fishing.audio = this.audio;
     this.fishing.particles = this.particles;
     this.fishing.onShake = (amount) => this.cameraRig.shake(amount);
-    this.fishing.onCatch = (c) => this.collection.addCatch(c);
+    this.fishing.onCatch = (c) => {
+      this.net?.announceCatch(c, this.profile.name);
+      return this.collection.addCatch(c);
+    };
     this.fishing.getRod = () => this.state.rod;
     this.fishing.getConditions = () => ({
       zone: this.world.zone.id,
@@ -124,7 +155,23 @@ export class Game {
     this.panels.register('journal', new JournalPanel(this.collection.journal));
     this.panels.register(
       'pause',
-      new PausePanel(this.settings, () => this.panels.close(), () => this.audio.play('click', {}, 0.1)),
+      new PausePanel(this.settings, () => this.panels.close(), () => this.audio.play('click', {}, 0.1), {
+        getName: () => this.profile.name,
+        onRename: (name) => {
+          this.profile.name = cleanName(name);
+          this.save.save();
+        },
+        onExport: () => encodeSave(this.save.collect()),
+        onImport: (code) => {
+          const data = decodeSave(code);
+          if (!data) return false;
+          // Stop autosave first so leaving the page doesn't overwrite the imported save.
+          this.save.enabled = false;
+          backend.save(data).then(() => location.reload());
+          return true;
+        },
+        onReset: () => this.save.clear().then(() => location.reload()),
+      }),
     );
     this.panels.register(
       'travel',
@@ -144,7 +191,6 @@ export class Game {
       this.afterDialog = null;
       next?.();
     };
-    this.metMarina = false;
     this.zoneBanner = new ZoneBanner(hudRoot);
     this.fade = el('<div class="fade"></div>');
     hudRoot.appendChild(this.fade);
@@ -156,7 +202,18 @@ export class Game {
     this.started = false;
     this.hudRoot = hudRoot;
     hudRoot.classList.add('pre-start');
-    this.titleScreen = new TitleScreen(hudRoot, () => this.onStart());
+    this.titleScreen = new TitleScreen(hudRoot, this.profile, (name) => this.onStart(name));
+
+    this.savedIndicator = el('<div class="saved-indicator">💾 Saved</div>');
+    hudRoot.appendChild(this.savedIndicator);
+    this.save.on('saved', () => {
+      this.savedIndicator.classList.add('visible');
+      clearTimeout(this.savedTimer);
+      this.savedTimer = setTimeout(() => this.savedIndicator.classList.remove('visible'), 1400);
+    });
+
+    // Multiplayer test mode between tabs of this browser (?lan). A server transport comes later.
+    if (new URLSearchParams(location.search).has('lan')) this.startMultiplayer(new BroadcastClient());
 
     this.settings.on('change', () => this.applySettings());
     this.applySettings();
@@ -169,10 +226,40 @@ export class Game {
   }
 
   start() {
-    this.renderer.setAnimationLoop((time) => this.tick(time));
+    this.renderer.setAnimationLoop(() => this.tick());
   }
 
-  onStart() {
+  // A spawn point from the save, if it's still somewhere you can stand.
+  savedSpawn(p) {
+    if (p && this.world.getWalkHeight(p.x, p.z) !== null) return { x: p.x, z: p.z, facing: p.facing ?? 0 };
+    return this.world.spawn;
+  }
+
+  startMultiplayer(client) {
+    this.net = new Multiplayer(this.scene, this.hudRoot, client, {
+      getLocal: () => this.localSnapshot(),
+      onCatch: (m) => this.toast(`${m.name} caught a ${m.size} cm ${m.fish}!`, 2600),
+      onPeersChanged: (count, name, what) => name && this.toast(`${name} ${what}`, 1800),
+    });
+  }
+
+  // What other players need to draw us.
+  localSnapshot() {
+    const out = { ...this.player.getSnapshot(), name: this.profile.name, zone: this.world.zone.id, bobber: null };
+    if (['casting', 'waiting', 'bite', 'reeling', 'retrieving'].includes(this.fishing.state)) {
+      const b = this.fishing.bobber.position;
+      out.bobber = [+b.x.toFixed(2), +b.y.toFixed(2), +b.z.toFixed(2)];
+    }
+    return out;
+  }
+
+  onStart(name) {
+    if (this.profile.isNew) {
+      this.profile.name = cleanName(name);
+      this.profile.isNew = false;
+    }
+    this.save.enabled = true;
+    this.save.save(); // so next visit says "welcome back"
     this.started = true;
     this.hudRoot.classList.remove('pre-start');
     this.audio.start();
@@ -185,10 +272,12 @@ export class Game {
     return this.panels.current === 'pause';
   }
 
-  tick(time) {
-    this.timer.update(time);
-    // Clamp dt so a backgrounded tab doesn't teleport the player.
-    const dt = Math.min(this.timer.getDelta(), 1 / 20);
+  tick() {
+    // Use performance.now() rather than the rAF timestamp: in a tab that starts in the
+    // background the first rAF timestamp can predate the timer, giving a negative dt.
+    this.timer.update();
+    // Clamp dt: never negative, and a backgrounded tab mustn't teleport the player.
+    const dt = Math.min(Math.max(this.timer.getDelta(), 0), 1 / 20);
 
     if (this.started) this.handleMenuKeys();
     this.input.enabled = this.started && !this.panels.isOpen && !this.dialog.isOpen && !this.traveling;
@@ -203,6 +292,7 @@ export class Game {
       this.cameraRig.update(dt, this.input, this.fishing.getCameraFocus(this.cameraFocus));
       this.updateEnvironment(dt);
     }
+    this.net?.update(dt, this.cameraRig.camera, this.world.zone.id);
     this.updateInteraction();
     this.hud.update(dt, this.input);
 
@@ -211,9 +301,8 @@ export class Game {
   }
 
   updateEnvironment(dt) {
-    // The clock only runs once you've started playing.
-    if (this.started) this.time.update(dt);
-    this.weather.update(dt, this.started ? dt / HOUR_SECONDS : 0);
+    // Time and weather follow the shared real-world clock (see TimeOfDay / Weather).
+    this.weather.update(dt, this.time.totalHours);
     const night = this.time.night;
     this.sky.update(this.time, this.weather, night);
     this.lighting.follow(this.cameraRig.target);
@@ -288,7 +377,10 @@ export class Game {
           'I run this little shop. Bring me your fish and I\'ll pay you in coins. Bigger fish are worth more!',
           'With coins you can buy better rods, bait... and hats. Very important hats.',
         ];
-    this.metMarina = true;
+    if (!this.metMarina) {
+      this.metMarina = true;
+      this.save.markDirty();
+    }
     this.afterDialog = () => this.panels.open('shop');
     this.dialog.open({ name: 'Marina', pages });
   }
@@ -318,6 +410,7 @@ export class Game {
     this.fishing.world = this.world;
     this.player.teleport(this.world, this.world.spawn);
     this.cameraRig.snapTo(this.player.position);
+    this.save.markDirty();
 
     await new Promise((r) => setTimeout(r, 300));
     this.fade.classList.remove('visible');

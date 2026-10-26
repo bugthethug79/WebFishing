@@ -15,6 +15,36 @@ export class PlayerState extends Emitter {
     this.hatId = 'bucket';
   }
 
+  // ---- save / sync ----
+  toJSON() {
+    return {
+      money: this.money,
+      ownedRods: [...this.ownedRods],
+      rodId: this.rodId,
+      bait: { ...this.bait },
+      baitId: this.baitId,
+      ownedHats: [...this.ownedHats],
+      hatId: this.hatId,
+    };
+  }
+
+  // Unknown ids (e.g. an item removed in a later version) are dropped instead of breaking the save.
+  fromJSON(data) {
+    if (!data) return;
+    const rodIds = new Set(RODS.map((r) => r.id));
+    const hatIds = new Set(HATS.map((h) => h.id));
+    this.money = Math.max(0, Math.floor(data.money ?? this.money));
+    this.ownedRods = new Set(['bamboo', ...(data.ownedRods ?? []).filter((id) => rodIds.has(id))]);
+    this.rodId = this.ownedRods.has(data.rodId) ? data.rodId : 'bamboo';
+    for (const b of BAITS) this.bait[b.id] = Math.max(0, Math.floor(data.bait?.[b.id] ?? 0));
+    this.baitId = data.baitId && this.bait[data.baitId] > 0 ? data.baitId : null;
+    this.ownedHats = new Set(['bucket', ...(data.ownedHats ?? []).filter((id) => hatIds.has(id))]);
+    this.hatId = this.ownedHats.has(data.hatId) ? data.hatId : 'bucket';
+    this.changed('load');
+    this.changed('rod');
+    this.changed('hat');
+  }
+
   get rod() {
     return byId(RODS, this.rodId);
   }

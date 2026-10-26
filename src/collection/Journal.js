@@ -1,12 +1,22 @@
 // Per-species catch records: discovered, count, biggest, first caught.
 
 import { Emitter } from '../core/Emitter.js';
-import { FISH } from './fishData.js';
+import { FISH, FISH_BY_ID } from './fishData.js';
 
 export class Journal extends Emitter {
   constructor() {
     super();
     this.records = {}; // speciesId -> { count, biggest, heaviest, firstCaught }
+  }
+
+  toJSON() {
+    return { records: structuredClone(this.records) };
+  }
+
+  fromJSON(data) {
+    if (!data) return;
+    this.records = Object.fromEntries(Object.entries(data.records ?? {}).filter(([id]) => FISH_BY_ID[id]));
+    this.emit('change', this);
   }
 
   get discoveredCount() {

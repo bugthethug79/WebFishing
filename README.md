@@ -2,7 +2,9 @@
 
 A cozy, low-poly, top-down 3D fishing game for the browser, built with [three.js](https://threejs.org/) and [Vite](https://vite.dev/).
 
-See [ROADMAP.md](ROADMAP.md) for what's done and what's next.
+See [ROADMAP.md](ROADMAP.md) for what's done and what's next, and [MULTIPLAYER.md](MULTIPLAYER.md) for the online plan.
+
+Progress saves automatically in your browser (localStorage). Use **Pause → Save data** to copy a save code to another device or start over.
 
 ## Running
 
@@ -40,10 +42,12 @@ src/
   economy/           rods/bait/hats, prices, player money + gear, shop transactions
   npc/               NPC behaviour (Marina)
   camera/            top-down follow camera
-  player/            player model + controller
+  player/            Avatar (model + animation), local Player controller, hats
   fishing/           fishing state machine, rod, bobber, line, effects, placeholder fish
   environment/       time of day, weather, sky lighting, rain
   effects/           particle system (dust, sparkles)
+  save/              profile, save manager (versioned, autosave), storage backend
+  net/               multiplayer session, remote players, tab-to-tab test transport
   world/
     Island.js        a zone's landmass as pure functions (shared by visuals + gameplay)
     zones/           zone definitions (Sunny Isle, Pine Lake) and the zone list
@@ -71,4 +75,8 @@ game.time.set(21)          // jump to 9 PM
 game.weather.set('rain')   // 'clear' | 'cloudy' | 'rain'
 game.travelTo('pine')      // 'sunny' | 'pine'
 game.state.earn(1000)      // pocket money for testing the shop
+game.save.save()           // save right now
 ```
+
+Add `?lan` to the URL and open two tabs to test the multiplayer plumbing locally.
+

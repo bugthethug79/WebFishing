@@ -74,10 +74,22 @@ Each milestone should leave the game in a playable, polished state.
 - [x] Wind sway shader for trees, palms, pines, grass and flowers (stronger in bad weather), baked into the static batches
 - [x] Gull cries by day, frog croaks at night
 
-## Milestone 8: Persistence
-- [ ] Save / load (localStorage)
+## ✅ Milestone 8: Persistence + multiplayer groundwork (done)
 - [x] Settings persistence (done early in Milestone 4)
+- [x] Versioned save (profile, gear, money, bucket, journal, zone + position, flags) with migrations
+- [x] Autosave: after changes, every 30 s, and when the tab is hidden or closed; "Saved" indicator
+- [x] Title screen: pick a name the first time, "Welcome back" after
+- [x] Pause menu: rename, copy / load a save code, start over
+- [x] Multiplayer prep: profile id, shared world clock + deterministic weather, `Avatar` split,
+      player snapshots, transport-agnostic `Multiplayer` session, remote players with name tags
+- [x] `?lan` test mode linking tabs in one browser (see MULTIPLAYER.md)
+
+## Milestone 9: Online multiplayer (next)
+See [MULTIPLAYER.md](MULTIPLAYER.md) for the plan and the decisions needed first.
+- [ ] Choose hosting and build a WebSocket room server
+- [ ] Join flow (rooms / invite codes), player list
+- [ ] Remote catches shown in 3D, emotes, optional chat
 
 ## Later / maybe
-- [ ] Multiplayer
+- [ ] Cloud saves / accounts
 - [ ] Mobile / touch controls

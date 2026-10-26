@@ -1,6 +1,7 @@
 // Pause menu: volume sliders, graphics toggles and a controls reference.
 
 import { el } from './format.js';
+import { NAME_MAX } from '../save/Profile.js';
 
 const SLIDERS = [
   ['masterVolume', 'Master volume'],
@@ -28,8 +29,10 @@ const CONTROLS = [
 ];
 
 export class PausePanel {
-  constructor(settings, onResume, onPreview) {
+  // save: { getName(), onRename(name), onExport() -> code, onImport(code) -> bool, onReset() }
+  constructor(settings, onResume, onPreview, save) {
     this.settings = settings;
+    this.save = save;
     this.el = el(`
       <div class="pause-panel">
         <div class="panel-header">
@@ -54,6 +57,22 @@ export class PausePanel {
               </label>`).join('')}
           </section>
           <section class="pause-section">
+            <h3>Profile</h3>
+            <form class="name-form">
+              <input class="name-input" maxlength="${NAME_MAX}" autocomplete="off" />
+              <button class="btn secondary" type="submit">Rename</button>
+            </form>
+            <h3>Save data</h3>
+            <p class="save-note">Your progress saves automatically in this browser.</p>
+            <div class="save-actions">
+              <button class="btn secondary export">Copy save code</button>
+              <button class="btn secondary import-toggle">Load save code</button>
+              <button class="btn secondary danger reset">Start over</button>
+            </div>
+            <div class="import-box" hidden>
+              <textarea class="import-code" rows="3" placeholder="Paste a save code here"></textarea>
+              <button class="btn import">Load</button>
+            </div>
             <h3>Controls</h3>
             <dl class="controls-list">
               ${CONTROLS.map(([k, v]) => `<dt><kbd>${k}</kbd></dt><dd>${v}</dd>`).join('')}
@@ -65,6 +84,7 @@ export class PausePanel {
     `);
 
     this.el.querySelector('.resume').addEventListener('click', onResume);
+    this.wireSave();
     this.el.addEventListener('input', (e) => {
       const key = e.target.dataset.key;
       if (!key) return;
@@ -75,7 +95,58 @@ export class PausePanel {
     });
   }
 
+  wireSave() {
+    const q = (s) => this.el.querySelector(s);
+    const note = q('.save-note');
+    const say = (text) => (note.textContent = text);
+
+    q('.name-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      this.save.onRename(q('.name-input').value);
+      q('.name-input').value = this.save.getName();
+      say(`Nice to meet you, ${this.save.getName()}!`);
+    });
+
+    q('.export').addEventListener('click', async () => {
+      const code = this.save.onExport();
+      try {
+        await navigator.clipboard.writeText(code);
+        say('Save code copied! Paste it into "Load save code" on another device.');
+      } catch {
+        // Clipboard can be blocked; show the code so it can be copied by hand.
+        q('.import-box').hidden = false;
+        q('.import-code').value = code;
+        say('Copy the code below to keep your save.');
+      }
+    });
+
+    q('.import-toggle').addEventListener('click', () => {
+      q('.import-box').hidden = !q('.import-box').hidden;
+    });
+    q('.import').addEventListener('click', () => {
+      const ok = this.save.onImport(q('.import-code').value);
+      say(ok ? 'Save loaded!' : 'That code didn\'t work. Check you copied all of it.');
+    });
+
+    const reset = q('.reset');
+    reset.addEventListener('click', () => {
+      // Two clicks, so nobody loses their journal by accident.
+      if (!reset.classList.contains('confirm')) {
+        reset.classList.add('confirm');
+        reset.textContent = 'Really? Click again';
+        setTimeout(() => {
+          reset.classList.remove('confirm');
+          reset.textContent = 'Start over';
+        }, 3000);
+        return;
+      }
+      this.save.onReset();
+    });
+  }
+
   render() {
+    this.el.querySelector('.name-input').value = this.save.getName();
+    this.el.querySelector('.save-note').textContent = 'Your progress saves automatically in this browser.';
     for (const input of this.el.querySelectorAll('input[data-key]')) {
       const v = this.settings.get(input.dataset.key);
       if (input.type === 'checkbox') input.checked = v;
