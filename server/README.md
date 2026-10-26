@@ -33,6 +33,7 @@ Players add your server's address in the game under **Multiplayer**.
 | `tls.cert`, `tls.key` | `""` | Paths to a certificate + key to serve `wss://` directly (see below) |
 | `tunnel.enabled` | `false` | Start a Cloudflare Tunnel for a secure address automatically (see below) |
 | `tunnel.token` | `""` | Cloudflare Tunnel token for a permanent address on your own domain |
+| `tunnel.protocol` | `"http2"` | How the tunnel talks to Cloudflare: `"http2"` (TCP, works on most hosts), `"quic"` (UDP) or `"auto"` |
 | `chat.enabled` | `true` | Turn chat on/off |
 | `chat.maxLength` | `200` | Longest chat message |
 | `chat.messagesPerWindow` / `windowSeconds` | `5` / `5` | Rate limit: at most N messages per window |
@@ -117,6 +118,18 @@ Panel hosts only let you run a program, so use the built-in tunnel for a secure 
 
 If the console says it couldn't get or start `cloudflared`, the host is blocking downloads or
 running extra programs; ask their admins, or use a host with HTTPS built in.
+
+### If the tunnel can't connect
+
+`Tunnel address reserved: ...` only means Cloudflare handed out an address. The server is
+reachable once you see **`✔ Secure address ready`**. If instead you see repeated
+`Failed to dial` errors:
+
+- **`failed to dial to edge with quic`**: the host blocks UDP. Make sure `"protocol": "http2"`
+  is set (it's the default in current versions of `server.js`) and restart.
+- **`dial tcp ...:7844: i/o timeout`** with `http2`: the host blocks outgoing connections to
+  port 7844, which Cloudflare Tunnels need. Ask the host's admins to allow **outbound TCP
+  port 7844** to Cloudflare, or run the server somewhere that allows it.
 
 ## Permanent address with your own domain
 

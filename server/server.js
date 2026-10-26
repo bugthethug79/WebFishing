@@ -43,7 +43,8 @@ const DEFAULT_CONFIG = {
   // Cloudflare Tunnel: a secure wss:// address without certificates or port forwarding.
   // enabled + no token: free random *.trycloudflare.com address (changes on restart).
   // token: a permanent tunnel on your own domain (see README).
-  tunnel: { enabled: false, token: '' },
+  // protocol: "http2" (TCP, works on most hosts) | "quic" (UDP) | "auto".
+  tunnel: { enabled: false, token: '', protocol: 'http2' },
   chat: { enabled: true, maxLength: 200, messagesPerWindow: 5, windowSeconds: 5, blockedWords: [] },
   dataDir: 'data',
 };
@@ -723,7 +724,8 @@ async function findCloudflared(dataDir) {
   return bin;
 }
 
-// Starts the tunnel and keeps it running. onAddress(host) fires when a quick tunnel gets its address.
+// Starts the tunnel and keeps it running. onAddress(host) fires once a quick tunnel is
+// actually connected (not just when Cloudflare hands out the address).
 async function startTunnel(config, onAddress) {
   let bin;
   try {
@@ -733,9 +735,12 @@ async function startTunnel(config, onAddress) {
     return { stop() {} };
   }
   const local = `${config.tls.cert ? 'https' : 'http'}://localhost:${config.port}`;
+  // HTTP/2 runs over plain TCP, which hosting containers allow far more often than QUIC (UDP).
+  const protocol = ['http2', 'quic', 'auto'].includes(config.tunnel.protocol) ? config.tunnel.protocol : 'http2';
+  const common = ['tunnel', '--no-autoupdate', '--protocol', protocol];
   const args = config.tunnel.token
-    ? ['tunnel', '--no-autoupdate', 'run', '--token', config.tunnel.token]
-    : ['tunnel', '--no-autoupdate', '--url', local, ...(config.tls.cert ? ['--no-tls-verify'] : [])];
+    ? [...common, 'run', '--token', config.tunnel.token]
+    : [...common, '--url', local, ...(config.tls.cert ? ['--no-tls-verify'] : [])];
   let child = null;
   let stopped = false;
   let delay = 2000;
@@ -743,22 +748,36 @@ async function startTunnel(config, onAddress) {
   const run = () => {
     log(config.tunnel.token ? 'Starting your Cloudflare Tunnel...' : 'Starting a free Cloudflare quick tunnel...');
     child = spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'] });
-    let announced = false;
+    let host = null;
+    let connected = false;
+    let failures = 0;
+    let explained = false;
     const onOutput = (chunk) => {
       const text = String(chunk);
       const quick = text.match(/https:\/\/([a-z0-9-]+\.trycloudflare\.com)/i);
-      if (quick && !announced) {
-        announced = true;
-        delay = 2000;
-        onAddress(quick[1]);
+      if (quick && !host) {
+        host = quick[1];
+        log(`Tunnel address reserved: ${host}. Connecting to Cloudflare (${protocol})...`);
       }
-      if (config.tunnel.token && !announced && /Registered tunnel connection/i.test(text)) {
-        announced = true;
+      if (!connected && /Registered tunnel connection/i.test(text)) {
+        connected = true;
         delay = 2000;
-        log('✔ Tunnel connected. Players join with the hostname you set in the Cloudflare dashboard.');
+        if (config.tunnel.token) log('✔ Tunnel connected. Players join with the hostname you set in the Cloudflare dashboard.');
+        else if (host) onAddress(host);
       }
-      if (/ERR|error/.test(text) && !/Retrying|retry/i.test(text)) {
-        for (const line of text.split('\n')) if (/ERR/.test(line)) log(`tunnel: ${line.replace(/^\S+\s+/, '').trim()}`);
+      for (const line of text.split('\n')) {
+        if (!/\bERR\b/.test(line)) continue;
+        failures++;
+        if (failures <= 3) log(`tunnel: ${line.replace(/^\S+\s+/, '').trim().slice(0, 160)}`);
+      }
+      if (!connected && failures >= 4 && !explained) {
+        explained = true;
+        log(
+          protocol === 'quic' || protocol === 'auto'
+            ? '✖ The tunnel cannot reach Cloudflare over QUIC (UDP). Set "protocol": "http2" in the tunnel settings and restart.'
+            : '✖ The tunnel cannot reach Cloudflare: this host seems to block outgoing connections to port 7844. ' +
+                'Ask your host to allow outbound TCP 7844, or see README "If the tunnel can\'t connect".',
+        );
       }
     };
     child.stdout.on('data', onOutput);
