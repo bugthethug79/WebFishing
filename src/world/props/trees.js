@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { PALETTE } from '../../config.js';
 import { flatMat, part, jitter } from './materials.js';
+import { swayable } from '../wind.js';
 
 export function createRoundTree(rng, scale = 1) {
   const g = new THREE.Group();
@@ -23,6 +24,7 @@ export function createRoundTree(rng, scale = 1) {
 
   g.scale.setScalar(scale);
   g.rotation.y = rng() * Math.PI * 2;
+  swayable(g, 1, 4 * scale);
   return { object: g, radius: 0.45 * scale };
 }
 
@@ -66,5 +68,6 @@ export function createPalm(rng, scale = 1) {
 
   g.scale.setScalar(scale);
   g.rotation.y = rng() * Math.PI * 2;
+  swayable(g, 1.4, 5 * scale);
   return { object: g, radius: 0.35 * scale };
 }

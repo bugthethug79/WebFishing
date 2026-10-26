@@ -14,6 +14,8 @@ import { createDock, DOCK } from './props/dock.js';
 import { createLampPost, createRowboat } from './props/harbor.js';
 import { createSignpost } from './props/signpost.js';
 import { waveHeight } from './water.js';
+import { addSway } from './wind.js';
+import { Life } from './life/Life.js';
 
 export class World {
   constructor(scene, zone) {
@@ -45,6 +47,7 @@ export class World {
     this.root.add(createTerrain(this.island, zone));
     this.water = createWater(this.island, zone);
     this.root.add(this.water.group);
+    this.life = new Life(this, zone.life);
   }
 
   // ---------- placement helpers used by zone builders ----------
@@ -153,19 +156,32 @@ export class World {
   batchStatic() {
     this.static.updateMatrixWorld(true);
     const batches = new Map();
-    this.static.traverse((o) => {
-      if (!o.isMesh) return;
-      let g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone();
-      // Only keep what flat-shaded materials need, so every geometry has matching attributes.
-      for (const name of Object.keys(g.attributes)) if (name !== 'position' && name !== 'normal') g.deleteAttribute(name);
-      g.applyMatrix4(o.matrixWorld);
-      const key = `${o.material.uuid}|${o.castShadow}`;
-      if (!batches.has(key)) batches.set(key, { material: o.material, cast: o.castShadow, geometries: [] });
-      batches.get(key).geometries.push(g);
-    });
+    for (const prop of this.static.children) {
+      // Wind sway weight per vertex: 0 at the prop's base rising to `sway` at `swayHeight`.
+      const sway = prop.userData.sway ?? 0;
+      const baseY = prop.position.y;
+      const height = prop.userData.swayHeight ?? 4;
+      prop.traverse((o) => {
+        if (!o.isMesh) return;
+        const g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone();
+        // Only keep what flat-shaded materials need, so every geometry has matching attributes.
+        for (const name of Object.keys(g.attributes)) if (name !== 'position' && name !== 'normal') g.deleteAttribute(name);
+        g.applyMatrix4(o.matrixWorld);
+        const pos = g.attributes.position;
+        const weights = new Float32Array(pos.count);
+        if (sway) for (let i = 0; i < pos.count; i++) weights[i] = sway * Math.min(1, Math.max(0, (pos.getY(i) - baseY) / height)) ** 1.5;
+        g.setAttribute('aSway', new THREE.BufferAttribute(weights, 1));
+        const key = `${o.material.uuid}|${o.castShadow}`;
+        if (!batches.has(key)) batches.set(key, { material: o.material, cast: o.castShadow, geometries: [], sways: false });
+        const batch = batches.get(key);
+        batch.geometries.push(g);
+        batch.sways ||= sway > 0;
+      });
+    }
     this.static.traverse((o) => o.geometry?.dispose());
     this.root.remove(this.static);
-    for (const { material, cast, geometries } of batches.values()) {
+    for (const { material, cast, geometries, sways } of batches.values()) {
+      if (sways) addSway(material);
       const merged = mergeGeometries(geometries);
       geometries.forEach((g) => g.dispose());
       const mesh = new THREE.Mesh(merged, material);
@@ -209,9 +225,11 @@ export class World {
 
   // ---------- per frame ----------
 
-  // night: 0 (day) .. 1 (full night)
-  update(time, dt, playerPos, night = 0) {
+  // env: { night, rain } both 0..1
+  update(time, dt, playerPos, env = {}) {
+    const night = env.night ?? 0;
     this.water.update(time);
+    this.life.update(dt, time, playerPos, env);
     for (const npc of this.npcs) npc.update(dt, playerPos);
     for (const a of this.animated) a.update(time, night);
     for (const l of this.nightLights) l.light.intensity = l.intensity * night * (l.light.userData.flicker ?? 1);

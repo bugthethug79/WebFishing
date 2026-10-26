@@ -76,6 +76,10 @@ export class FishingSystem {
     // Set by the game: { zone, night, raining } decides which fish are out.
     this.getConditions = () => ({ zone: 'sunny', night: false, raining: false });
 
+    // Optional, set by the game: particle system and screen shake.
+    this.particles = null;
+    this.onShake = null;
+
     this.aim = createAimMarker();
     scene.add(this.aim.object);
 
@@ -93,6 +97,7 @@ export class FishingSystem {
     this.aim.hide();
     if (this.fish) this.scene.remove(this.fish.object);
     this.fish = null;
+    this.shadow = null;
     this.setState('idle');
   }
 
@@ -213,8 +218,13 @@ export class FishingSystem {
 
   startWaiting() {
     this.bait = this.useBait();
+    // A fish shadow nearby swims over to the bobber, and bites come sooner.
+    const shadows = this.world.life?.shadows;
+    this.shadow = shadows?.nearest(this.castTo.x, this.castTo.z, 4) ?? null;
+    if (this.shadow) shadows.attract(this.shadow, this.castTo.x, this.castTo.z);
     const rainBonus = this.getConditions().raining ? 0.8 : 1; // fish are livelier in the rain
-    this.biteAt = lerp(TUNING.waitTime[0], TUNING.waitTime[1], Math.random()) * this.bait.bite * rainBonus;
+    const shadowBonus = this.shadow ? 0.55 : 1;
+    this.biteAt = lerp(TUNING.waitTime[0], TUNING.waitTime[1], Math.random()) * this.bait.bite * rainBonus * shadowBonus;
     // A few nibbles before the real bite keep you watching the bobber.
     const count = Math.floor(Math.random() * 4);
     this.nibbles = Array.from({ length: count }, () => lerp(0.8, this.biteAt - 0.5, Math.random())).sort((a, b) => a - b);
@@ -272,6 +282,8 @@ export class FishingSystem {
   }
 
   startReeling() {
+    this.world.life?.shadows.hook(this.shadow);
+    this.shadow = null;
     const { x, z } = this.castTo;
     const depth = Math.max(0, WORLD.waterLevel - this.world.island.groundHeight(x, z));
     const depthBonus = clamp((depth - 1.5) / 1.5, 0, 1);
@@ -291,6 +303,7 @@ export class FishingSystem {
     };
     this.effects.splash(x, WORLD.waterLevel, z, 12, 1);
     this.sfx('hook');
+    this.onShake?.(0.25);
     this.setState('reeling');
   }
 
@@ -357,6 +370,7 @@ export class FishingSystem {
       const snapped = r.snap >= R.snapTime;
       this.ui.toast(snapped ? 'Snap! The line broke.' : 'It got away...');
       this.sfx(snapped ? 'snap' : 'escape');
+      if (snapped) this.onShake?.(0.45);
       this.startRetrieve();
     }
   }
@@ -372,6 +386,8 @@ export class FishingSystem {
     this.cardShown = false;
     this.catchResult = this.onCatch?.(this.catch) ?? {};
     this.sfx('catch', { legendary: this.catch.rarity.id === 'legendary' });
+    if (this.catch.rarity.id === 'legendary') this.onShake?.(0.4);
+    this.sparkleTimer = 0;
     this.setState('caught');
   }
 
@@ -387,6 +403,28 @@ export class FishingSystem {
     fish.position.y += 2.5 * 4 * t * (1 - t);
     fish.rotation.set(0, cameraRig.yaw, Math.sin(this.time * 10) * 0.3 * (1 - t * 0.6));
     this.fish.tail.rotation.y = Math.sin(this.time * 16) * 0.5;
+
+    // Rare and legendary fish glitter while you show them off.
+    const rarity = this.catch.rarity.id;
+    if (this.particles && (rarity === 'rare' || rarity === 'legendary')) {
+      this.sparkleTimer -= dt;
+      if (this.sparkleTimer <= 0) {
+        this.sparkleTimer = rarity === 'legendary' ? 0.05 : 0.1;
+        const p = fish.position;
+        this.particles.emit(p.x + (Math.random() - 0.5) * 1.4, p.y + (Math.random() - 0.3) * 0.8, p.z + (Math.random() - 0.5) * 1.4, {
+          count: 1,
+          shape: 'spark',
+          color: rarity === 'legendary' ? 0xffd84d : 0xb07cff,
+          speed: 0.2,
+          up: 0.8,
+          gravity: -0.5,
+          life: 0.8,
+          size: 0.12,
+          grow: 1,
+          spin: 6,
+        });
+      }
+    }
 
     // Bobber comes home with it.
     this.bobber.position.lerp(this._tmp.copy(this.tip).setY(this.tip.y - 0.5), damp(10, dt));
@@ -406,6 +444,8 @@ export class FishingSystem {
   }
 
   startRetrieve(delay = 0) {
+    this.world.life?.shadows.release(this.shadow);
+    this.shadow = null;
     this.retrieveDelay = delay;
     this.retrieveFrom.copy(this.bobber.position);
     this.dipTarget = 0;

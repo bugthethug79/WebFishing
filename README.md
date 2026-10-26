@@ -43,6 +43,7 @@ src/
   player/            player model + controller
   fishing/           fishing state machine, rod, bobber, line, effects, placeholder fish
   environment/       time of day, weather, sky lighting, rain
+  effects/           particle system (dust, sparkles)
   world/
     Island.js        a zone's landmass as pure functions (shared by visuals + gameplay)
     zones/           zone definitions (Sunny Isle, Pine Lake) and the zone list
@@ -51,6 +52,8 @@ src/
     lighting.js      sun, sky, fog
     Colliders.js     simple 2D circle / box collision
     World.js         builds a zone and answers "can I stand here?"; batches static props
+    wind.js          foliage sway shader
+    life/            fish shadows, critters (crabs, frogs), birds
     props/           dock, hut, trees, rocks, decor, forest, harbor (lamps, rowboats)
   ui/                DOM HUD overlay + fishing widgets
 ```

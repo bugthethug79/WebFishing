@@ -49,7 +49,8 @@ export const PINE_LAKE = {
     seabedDeep: 0x1f5a6e,
     water: 0x37b5b0,
   },
-  ambience: { waves: 0.35 },
+  ambience: { waves: 0.35, frogs: true },
+  life: { fishShadows: 7, frogs: 4, songbirds: 3 },
   ferryColor: 0x3f8fc9,
 
   build(world) {

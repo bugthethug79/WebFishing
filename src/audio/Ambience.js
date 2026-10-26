@@ -1,6 +1,9 @@
 // Background soundscape: rolling waves (louder near the shore), birdsong by day,
 // crickets at night, and rain.
 
+// Seconds since the previous ambience update (for per-second chances).
+const dt = (now, self) => Math.min(0.1, now - (self.lastUpdate ?? now));
+
 export class Ambience {
   constructor(engine) {
     this.engine = engine;
@@ -48,7 +51,8 @@ export class Ambience {
   }
 
   // shore: 0 far inland .. 1 at the water's edge. env: { night, rain, waves } all 0..1.
-  update(shore, { night = 0, rain = 0, waves = 1 } = {}) {
+  // gulls / frogs: whether this zone has them.
+  update(shore, { night = 0, rain = 0, waves = 1, gulls = false, frogs = false } = {}) {
     const a = this.engine;
     if (!this.started) return;
     const now = a.now;
@@ -81,10 +85,31 @@ export class Ambience {
       this.nextWave = now + rise + fall * 0.8;
     }
 
+    // Gull cries by day over the sea, frog croaks at night by the lake.
+    if (gulls && night < 0.5 && rain < 0.6 && Math.random() < dt(now, this) * 0.08) this.gull();
+    if (frogs && night > 0.4 && Math.random() < dt(now, this) * 0.25) this.croak(night);
+    this.lastUpdate = now;
+
     // Birds chirp more often away from the surf.
     if (now >= this.nextBird) {
       if (night < 0.5 && rain < 0.5) this.chirp(0.03 * (1.2 - shore * 0.7) * (1 - night));
       this.nextBird = now + 2.5 + Math.random() * 6 * (0.6 + shore);
+    }
+  }
+
+  gull() {
+    const a = this.engine;
+    const calls = 2 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < calls; i++) {
+      const at = a.now + i * 0.22;
+      a.tone(1900, { at, dur: 0.18, freqEnd: 1200, type: 'triangle', gain: 0.025, bus: 'ambient', filter: 3000 });
+    }
+  }
+
+  croak(night) {
+    const a = this.engine;
+    for (let i = 0; i < 2; i++) {
+      a.tone(150 + Math.random() * 40, { at: a.now + i * 0.13, dur: 0.1, freqEnd: 110, type: 'square', gain: 0.03 * night, bus: 'ambient', filter: 600 });
     }
   }
 

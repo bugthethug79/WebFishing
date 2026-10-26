@@ -41,7 +41,8 @@ export const SUNNY_ISLE = {
     seabedDeep: PALETTE.seabedDeep,
     water: PALETTE.water,
   },
-  ambience: { waves: 1 },
+  ambience: { waves: 1, gulls: true },
+  life: { fishShadows: 9, crabs: 5, gulls: 4 },
   ferryColor: 0xe0564f,
 
   build(world) {

@@ -2,6 +2,7 @@
 
 import * as THREE from 'three';
 import { flatMat, part, jitter } from './materials.js';
+import { swayable } from '../wind.js';
 
 const PINE_GREENS = [0x2f8f5a, 0x3a9e60, 0x267a4c, 0x45a866];
 
@@ -17,6 +18,7 @@ export function createPine(rng, scale = 1) {
   }
   g.scale.setScalar(scale);
   g.rotation.y = rng() * Math.PI * 2;
+  swayable(g, 0.7, 4.5 * scale);
   return { object: g, radius: 0.35 * scale };
 }
 

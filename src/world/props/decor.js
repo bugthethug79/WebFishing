@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { PALETTE } from '../../config.js';
 import { flatMat } from './materials.js';
+import { swayable } from '../wind.js';
 
 export function createFlower(rng) {
   const g = new THREE.Group();
@@ -11,7 +12,7 @@ export function createFlower(rng) {
   const head = new THREE.Mesh(new THREE.IcosahedronGeometry(0.09, 0), flatMat(rng.pick(PALETTE.flowers)));
   head.position.y = 0.32;
   g.add(stem, head);
-  return g;
+  return swayable(g, 0.8, 0.35);
 }
 
 export function createTuft(rng) {
@@ -23,5 +24,5 @@ export function createTuft(rng) {
     blade.rotation.z = (i - 1) * 0.35;
     g.add(blade);
   }
-  return g;
+  return swayable(g, 0.8, 0.35);
 }

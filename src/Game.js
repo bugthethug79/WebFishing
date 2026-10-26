@@ -15,6 +15,9 @@ import { TimeOfDay, HOUR_SECONDS } from './environment/TimeOfDay.js';
 import { Weather } from './environment/Weather.js';
 import { Sky } from './environment/Sky.js';
 import { Rain } from './environment/Rain.js';
+import { Particles } from './effects/Particles.js';
+import { windUniforms } from './world/wind.js';
+import { PLAYER } from './config.js';
 import { FishingSystem } from './fishing/FishingSystem.js';
 import { Collection } from './collection/Collection.js';
 import { PlayerState } from './economy/PlayerState.js';
@@ -52,9 +55,11 @@ export class Game {
     this.weather = new Weather();
     this.sky = new Sky(this.lighting, this.scene);
     this.rain = new Rain(this.scene);
+    this.particles = new Particles(this.scene);
     this.world = new World(this.scene, ZONES_BY_ID.sunny);
+    this.hookWorld();
     this.player = new Player(this.scene, this.world, this.world.spawn);
-    this.player.onStep = () => this.audio.play('step', { surface: this.surfaceUnderPlayer() }, 0.12);
+    this.player.onStep = () => this.onStep();
     this.cameraRig = new CameraRig(window.innerWidth / window.innerHeight);
     this.cameraRig.snapTo(this.player.position);
     this.cameraFocus = new THREE.Vector3();
@@ -74,6 +79,8 @@ export class Game {
     });
     this.fishing = new FishingSystem(this.scene, this.world, this.player, fishingUI);
     this.fishing.audio = this.audio;
+    this.fishing.particles = this.particles;
+    this.fishing.onShake = (amount) => this.cameraRig.shake(amount);
     this.fishing.onCatch = (c) => this.collection.addCatch(c);
     this.fishing.getRod = () => this.state.rod;
     this.fishing.getConditions = () => ({
@@ -211,9 +218,12 @@ export class Game {
     this.sky.update(this.time, this.weather, night);
     this.lighting.follow(this.cameraRig.target);
     this.world.water.foamColor.setScalar(this.sky.brightness);
-    this.world.update(this.elapsed, dt, this.player.position, night);
+    this.world.update(this.elapsed, dt, this.player.position, { night, rain: this.weather.rain });
+    windUniforms.uTime.value = this.elapsed;
+    windUniforms.uWind.value = 1 + this.weather.cloud * 0.4 + this.weather.rain * 1.1;
+    this.particles.update(dt);
     this.rain.update(dt, this.weather.rain, this.cameraRig.target, (x, z) => this.fishing.isFishableWater(x, z, 0.1));
-    this.audio.update(this.shoreProximity(), { night, rain: this.weather.rain, waves: this.world.zone.ambience.waves });
+    this.audio.update(this.shoreProximity(), { night, rain: this.weather.rain, ...this.world.zone.ambience });
     this.hud.setClock(this.time, this.weather);
   }
 
@@ -283,6 +293,15 @@ export class Game {
     this.dialog.open({ name: 'Marina', pages });
   }
 
+  // Connect a freshly built world to game-wide effects.
+  hookWorld() {
+    this.world.life.onSplash = (x, z) => {
+      this.fishing.effects.ripple(x, z, 0.7);
+      this.fishing.effects.splash(x, 0, z, 6, 0.5);
+      this.audio.play('plop');
+    };
+  }
+
   // Fade out, swap the loaded zone, fade back in with the area banner.
   async travelTo(zoneId) {
     if (this.traveling || zoneId === this.world.zone.id) return;
@@ -295,6 +314,7 @@ export class Game {
     this.fishing.reset();
     this.world.dispose();
     this.world = new World(this.scene, ZONES_BY_ID[zoneId]);
+    this.hookWorld();
     this.fishing.world = this.world;
     this.player.teleport(this.world, this.world.spawn);
     this.cameraRig.snapTo(this.player.position);
@@ -303,6 +323,26 @@ export class Game {
     this.fade.classList.remove('visible');
     this.zoneBanner.show(this.world.zone);
     this.traveling = false;
+  }
+
+  // Footstep sound plus a little dust puff (bigger when running, none on the dock).
+  onStep() {
+    const surface = this.surfaceUnderPlayer();
+    this.audio.play('step', { surface }, 0.12);
+    if (surface === 'wood') return;
+    const running = this.player.velocity.length() > PLAYER.walkSpeed * 1.1;
+    if (surface === 'grass' && !running) return;
+    const p = this.player.position;
+    this.particles.emit(p.x, p.y + 0.05, p.z, {
+      count: running ? 4 : 2,
+      color: surface === 'sand' ? 0xf5e6c0 : 0xd8efb0,
+      speed: 0.7,
+      up: 0.5,
+      gravity: -0.6,
+      life: 0.5,
+      size: 0.07,
+      grow: 2,
+    });
   }
 
   surfaceUnderPlayer() {

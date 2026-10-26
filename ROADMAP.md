@@ -65,10 +65,14 @@ Each milestone should leave the game in a playable, polished state.
 - [x] Static prop batching: ~700 draw calls down to ~150-200 per frame
 - [ ] More zones (river, pier town...): add a file in `world/zones/` and list it in `zones/index.js`
 
-## Milestone 7: Life & juice
-- [ ] Ambient life: birds, fish shadows in the water, crabs on the beach
-- [ ] Particles: splashes, footstep dust, sparkles on rare catches
-- [ ] Wind sway on trees and grass
+## ✅ Milestone 7: Life & juice (done)
+- [x] Fish shadows under the water; casting near one draws it to your bobber for a quicker bite
+- [x] Crabs scuttling on Sunny Isle's beach, frogs hopping at Pine Lake; both flee, frogs dive in
+- [x] Gulls circling Sunny Isle, songbirds crossing the lake; they leave at night and in heavy rain
+- [x] Pooled particle system: footstep dust (sand / running), sparkles on rare + legendary catches
+- [x] Camera shake on hook, line snap and legendary catches
+- [x] Wind sway shader for trees, palms, pines, grass and flowers (stronger in bad weather), baked into the static batches
+- [x] Gull cries by day, frog croaks at night
 
 ## Milestone 8: Persistence
 - [ ] Save / load (localStorage)
