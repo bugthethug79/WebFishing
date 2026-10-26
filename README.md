@@ -41,3 +41,9 @@ src/
     props/           dock, hut, trees, rocks, decor
   ui/                DOM HUD overlay
 ```
+
+## Deploying to GitHub Pages
+
+`.github/workflows/deploy.yml` builds and deploys on every push to `main` (or the dev branch).
+One-time setup: **Settings → Pages → Build and deployment → Source: GitHub Actions**.
+The game is then served at `https://<user>.github.io/WebFishing/`.
