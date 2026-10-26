@@ -26,7 +26,7 @@ export class Input {
     const typing = (e) => e.target instanceof HTMLElement && (e.target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName));
     target.addEventListener('keydown', (e) => {
       if (typing(e)) return;
-      if (e.code === 'Space') e.preventDefault();
+      if (e.code === 'Space' || e.code === 'Tab') e.preventDefault(); // no page scroll / focus hopping
       if (!e.repeat) press(e.code);
     });
     target.addEventListener('keyup', (e) => release(e.code));

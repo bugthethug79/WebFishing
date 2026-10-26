@@ -26,6 +26,8 @@ const CONTROLS = [
   ['Q / E', 'Rotate camera'],
   ['Scroll', 'Zoom'],
   ['Esc', 'Pause / close'],
+  ['T', 'Chat (online)'],
+  ['Tab', 'Player list (online)'],
 ];
 
 export class PausePanel {
@@ -57,6 +59,12 @@ export class PausePanel {
               </label>`).join('')}
           </section>
           <section class="pause-section">
+            <div class="online-box" hidden>
+              <h3>Online</h3>
+              <p class="online-info"></p>
+              <button class="btn secondary danger leave">Leave server</button>
+            </div>
+            <div class="solo-box">
             <h3>Profile</h3>
             <form class="name-form">
               <input class="name-input" maxlength="${NAME_MAX}" autocomplete="off" />
@@ -72,6 +80,7 @@ export class PausePanel {
             <div class="import-box" hidden>
               <textarea class="import-code" rows="3" placeholder="Paste a save code here"></textarea>
               <button class="btn import">Load</button>
+            </div>
             </div>
             <h3>Controls</h3>
             <dl class="controls-list">
@@ -93,6 +102,14 @@ export class PausePanel {
       this.render();
       if (key === 'sfxVolume' || key === 'masterVolume') onPreview?.();
     });
+  }
+
+  // Online play: show the server and a Leave button instead of local save tools.
+  setOnline({ server, name, onLeave }) {
+    this.el.querySelector('.online-box').hidden = false;
+    this.el.querySelector('.solo-box').hidden = true;
+    this.el.querySelector('.online-info').textContent = `Playing on ${server} as ${name}. Your progress is saved on the server.`;
+    this.el.querySelector('.leave').addEventListener('click', onLeave);
   }
 
   wireSave() {

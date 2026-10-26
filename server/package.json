@@ -1,0 +1,14 @@
+{
+  "name": "webfishing-server",
+  "version": "1.0.0",
+  "description": "Self-hostable multiplayer server for WebFishing. No dependencies.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT"
+}

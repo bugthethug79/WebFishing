@@ -1,72 +1,51 @@
-# Multiplayer plan
+# Multiplayer
 
-Groundwork for online play landed in Milestone 8. This doc covers what's ready,
-what's still needed, and the decisions to make before building it.
+WebFishing multiplayer is **optional and community-hosted**: anyone can run a server with
+the single file in [`server/`](server/README.md), and players join from the game's
+**Multiplayer** menu. Solo play keeps its own local save.
 
-## What's already in place
+## How it works
 
-| Piece | Where | Why it matters |
-| --- | --- | --- |
-| Player profile (stable id + display name) | `src/save/Profile.js` | Name tags now; accounts later |
-| Versioned save format with migrations | `src/save/SaveManager.js` | Same JSON can be stored on a server ("cloud saves") |
-| Pluggable save storage | `src/save/storage.js` | Swap `LocalStorageBackend` for a server backend without touching the game |
-| Shared world clock + deterministic weather | `src/environment/TimeOfDay.js`, `Weather.js` | Everyone sees the same time of day and weather with no server sync |
-| Deterministic world generation | `src/world/zones/*` (seeded) | Every client builds identical islands and lakes |
-| `Avatar` split from the local `Player` | `src/player/Avatar.js` | Remote players reuse the exact same character + animation |
-| Player snapshots | `Player.getSnapshot()`, `Game.localSnapshot()` | Small JSON of position / pose / gear / bobber, sent ~10x a second |
-| Transport-agnostic session | `src/net/Multiplayer.js` | Handles join/leave, smoothing, zones, catch announcements |
-| Remote players | `src/net/RemotePlayer.js` | Interpolated avatar, bobber + line, name tag |
-| Test transport between tabs | `src/net/BroadcastClient.js` | Open the game twice with `?lan` to see each other (same browser only) |
+- **Servers** are one Node.js file with no dependencies (`node server.js`). A `config.json`
+  sets the name, message of the day, public/private (passcode), player limit, admins and chat rules.
+- **Accounts live on each server.** Players register a username and password per server, and
+  their progress (money, gear, bucket, journal, position) is saved there. Solo progress is separate.
+- **In game:** see other players with name tags, their bobbers and the fish they hold up;
+  press **T** to chat (speech bubbles appear over heads); hold **Tab** for the player list.
+- **Shared world:** time of day and weather come from the server's clock, so everyone sees
+  the same sunset and rain. Positions are relayed only to players in the same zone.
+- **Resilient:** the game reconnects automatically if the connection drops; "remember me"
+  keeps you logged in per server.
 
-### Try the test mode
+See [`server/README.md`](server/README.md) for hosting, configuration, `wss://` setup and moderation.
 
-Open `http://localhost:5173/?lan` (or the GitHub Pages URL with `?lan`) in two tabs of the
-same browser. Each tab shows the other player, their bobber when they cast, and
-announces their catches. This is **not** online multiplayer: it only links tabs on one computer,
-and both tabs share one save.
+## Code map
 
-## What online play still needs
+| Piece | Where |
+| --- | --- |
+| Server (WebSocket, accounts, chat, moderation, relays) | `server/server.js` |
+| Protocol version + address handling | `src/net/protocol.js` |
+| Connection + login + reconnect, server-side saves | `src/net/OnlineSession.js`, `src/net/WebSocketClient.js` |
+| Saved servers and remembered logins | `src/net/serverList.js` |
+| Session: remote players, roster, chat/catch relay | `src/net/Multiplayer.js`, `src/net/RemotePlayer.js` |
+| UI: server browser, chat, player list, reconnect overlay | `src/ui/ServerBrowser.js`, `Chat.js`, `PlayerList.js`, `ConnectionOverlay.js` |
+| Tab-to-tab test transport (`?lan`) | `src/net/BroadcastClient.js` |
 
-GitHub Pages only serves static files, so online play needs a small realtime server
-somewhere. The game only needs a transport with this interface (see `BroadcastClient`):
+## Proximity voice chat (planned discussion)
 
-```js
-client.id                  // this connection's id
-client.send(message)       // broadcast to the room
-client.onMessage(fn)       // messages from others: { from, type, ... }
-client.close()
-```
+Doable with WebRTC: microphone audio goes directly between nearby players, the game server
+only relays the connection setup messages, and each voice plays through a positional audio
+panner on that player's avatar (quieter with distance, from the right direction).
 
-A `WebSocketClient` implementing that, plus a server that relays messages within a room,
-is enough for the first version.
+Things to decide together:
+- **Connectivity:** some home networks need a TURN relay server (bandwidth costs); a config
+  option could let server owners add one.
+- **Scale:** direct connections suit ~8-10 players in earshot; beyond that an SFU media server is needed.
+- **Safety:** push-to-talk, per-player mute, a server option to disable voice, mic permission prompts.
 
-### Hosting options
+## Ideas for later
 
-| Option | Good for | Notes |
-| --- | --- | --- |
-| **Cloudflare Durable Objects / PartyKit** | Rooms of players, low latency | JavaScript server, WebSockets built in, generous free tier. **Recommended** for rooms. |
-| **Supabase Realtime** | Rooms + accounts + cloud saves in one place | Broadcast channels, auth and a Postgres DB. Good if we want logins. |
-| Firebase Realtime Database | Quick prototypes | Easy, but a less natural fit for frequent position updates. |
-| Node + `ws` on Render / Fly.io | Full control | We run and maintain a server ourselves. |
-| WebRTC peer-to-peer | No relay costs | Still needs a signalling server; NAT problems for some players. |
-
-## Decisions needed before the multiplayer milestone
-
-1. **Hosting:** which option above (recommendation: Cloudflare/PartyKit for rooms; add
-   Supabase later if we want accounts).
-2. **How people meet:** one shared public island per zone, or private rooms with invite codes,
-   or both?
-3. **Saves:** keep saves local per browser, or add accounts + cloud saves?
-4. **Chat:** text chat, quick emotes only (safer and simpler), or none at first?
-5. **Room size:** suggested 8-12 players per zone.
-6. **Trust:** cozy co-op can trust clients (each player rolls their own fish). Competitive
-   features (leaderboards, trading) would need server-side checks.
-
-## Proposed scope for the multiplayer milestone
-
-- WebSocket transport + room server (per zone, invite codes)
-- Lobby / join flow on the title screen, player list in the pause menu
-- Others hold up their catches above their heads (not just a toast)
-- Emotes (wave, cheer) and optional chat
-- Server-provided clock offset so time-of-day can't drift between clients
-- Reconnect handling and a small "connection" indicator
+- Emotes (wave, cheer) and simple gestures
+- Trading fish between players, co-op fishing events
+- An optional public server directory (would need one central listing service)
+- Cloud saves that follow an account across servers

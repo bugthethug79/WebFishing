@@ -2,7 +2,9 @@
 
 A cozy, low-poly, top-down 3D fishing game for the browser, built with [three.js](https://threejs.org/) and [Vite](https://vite.dev/).
 
-See [ROADMAP.md](ROADMAP.md) for what's done and what's next, and [MULTIPLAYER.md](MULTIPLAYER.md) for the online plan.
+See [ROADMAP.md](ROADMAP.md) for what's done and what's next, and [MULTIPLAYER.md](MULTIPLAYER.md) for multiplayer.
+
+**Want to host a multiplayer server?** See [server/README.md](server/README.md): it's one file, `node server.js`.
 
 Progress saves automatically in your browser (localStorage). Use **Pause → Save data** to copy a save code to another device or start over.
 
@@ -23,6 +25,8 @@ npm run build    # production build into dist/
 | Space / Left click | Hold to charge a cast, release to throw. Press on a bite to hook, hold to reel |
 | F | Interact (signs, doors) |
 | R | Switch bait |
+| T | Chat (multiplayer) |
+| Tab (hold) | Player list (multiplayer) |
 | B | Open bucket |
 | J | Open journal |
 | Esc | Pause / settings, or close a menu |
@@ -47,7 +51,8 @@ src/
   environment/       time of day, weather, sky lighting, rain
   effects/           particle system (dust, sparkles)
   save/              profile, save manager (versioned, autosave), storage backend
-  net/               multiplayer session, remote players, tab-to-tab test transport
+  net/               online session + login, WebSocket client, multiplayer session, remote players
+server/              self-hostable multiplayer server (single file, no dependencies)
   world/
     Island.js        a zone's landmass as pure functions (shared by visuals + gameplay)
     zones/           zone definitions (Sunny Isle, Pine Lake) and the zone list

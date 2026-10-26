@@ -1,3 +1,7 @@
 node_modules
 dist
 .DS_Store
+
+# Server runtime files (owners' own settings and accounts)
+server/config.json
+server/data/

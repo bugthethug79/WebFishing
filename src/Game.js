@@ -36,6 +36,13 @@ import { SaveManager, encodeSave, decodeSave } from './save/SaveManager.js';
 import { LocalStorageBackend } from './save/storage.js';
 import { Multiplayer } from './net/Multiplayer.js';
 import { BroadcastClient } from './net/BroadcastClient.js';
+import { ServerSaveBackend } from './net/OnlineSession.js';
+import { Chat } from './ui/Chat.js';
+import { PlayerList } from './ui/PlayerList.js';
+import { ConnectionOverlay } from './ui/ConnectionOverlay.js';
+import { HOUR_SECONDS } from './environment/TimeOfDay.js';
+import { Inventory } from './collection/Inventory.js';
+import { Journal } from './collection/Journal.js';
 import { InteractPrompt } from './ui/InteractPrompt.js';
 import { DialogBox } from './ui/DialogBox.js';
 import { TitleScreen } from './ui/TitleScreen.js';
@@ -153,9 +160,7 @@ export class Game {
       }),
     );
     this.panels.register('journal', new JournalPanel(this.collection.journal));
-    this.panels.register(
-      'pause',
-      new PausePanel(this.settings, () => this.panels.close(), () => this.audio.play('click', {}, 0.1), {
+    this.pausePanel = new PausePanel(this.settings, () => this.panels.close(), () => this.audio.play('click', {}, 0.1), {
         getName: () => this.profile.name,
         onRename: (name) => {
           this.profile.name = cleanName(name);
@@ -171,8 +176,8 @@ export class Game {
           return true;
         },
         onReset: () => this.save.clear().then(() => location.reload()),
-      }),
-    );
+      });
+    this.panels.register('pause', this.pausePanel);
     this.panels.register(
       'travel',
       new TravelPanel(this.collection.journal, () => this.world.zone.id, (id) => this.travelTo(id)),
@@ -202,7 +207,10 @@ export class Game {
     this.started = false;
     this.hudRoot = hudRoot;
     hudRoot.classList.add('pre-start');
-    this.titleScreen = new TitleScreen(hudRoot, this.profile, (name) => this.onStart(name));
+    this.titleScreen = new TitleScreen(hudRoot, this.profile, {
+      onSolo: (name) => this.startSolo(name),
+      onOnline: (session, welcome) => this.startOnline(session, welcome),
+    });
 
     this.savedIndicator = el('<div class="saved-indicator">💾 Saved</div>');
     hudRoot.appendChild(this.savedIndicator);
@@ -235,17 +243,31 @@ export class Game {
     return this.world.spawn;
   }
 
-  startMultiplayer(client) {
+  startMultiplayer(client, { server = false, roster = [] } = {}) {
     this.net = new Multiplayer(this.scene, this.hudRoot, client, {
+      server,
+      roster,
       getLocal: () => this.localSnapshot(),
-      onCatch: (m) => this.toast(`${m.name} caught a ${m.size} cm ${m.fish}!`, 2600),
-      onPeersChanged: (count, name, what) => name && this.toast(`${name} ${what}`, 1800),
+      onCatch: (m) => {
+        const text = `🎣 ${m.name} caught a ${m.size} cm ${m.fish}!`;
+        if (this.chat) this.chat.add(null, text, { system: true });
+        if (!this.chat || m.rarity === 'Rare' || m.rarity === 'Legendary') this.toast(text, 2600);
+      },
+      // With a server, joins/leaves arrive as chat lines instead.
+      onPeersChanged: (count, name, what) => !server && name && this.toast(`${name} ${what}`, 1800),
+      onChat: (m, peer) => {
+        this.chat?.add(m.system ? null : m.name, m.text, { system: m.system, self: m.from === client.id });
+        if (!m.system) peer?.say(m.text);
+      },
     });
   }
 
   // What other players need to draw us.
   localSnapshot() {
-    const out = { ...this.player.getSnapshot(), name: this.profile.name, zone: this.world.zone.id, bobber: null };
+    const out = { ...this.player.getSnapshot(), name: this.profile.name, zone: this.world.zone.id, bobber: null, holding: null };
+    if (this.fishing.state === 'caught' && this.fishing.catch) {
+      out.holding = { fish: this.fishing.catch.species.id, size: this.fishing.catch.size };
+    }
     if (['casting', 'waiting', 'bite', 'reeling', 'retrieving'].includes(this.fishing.state)) {
       const b = this.fishing.bobber.position;
       out.bobber = [+b.x.toFixed(2), +b.y.toFixed(2), +b.z.toFixed(2)];
@@ -253,13 +275,87 @@ export class Game {
     return out;
   }
 
-  onStart(name) {
+  startSolo(name) {
     if (this.profile.isNew) {
       this.profile.name = cleanName(name);
       this.profile.isNew = false;
     }
     this.save.enabled = true;
     this.save.save(); // so next visit says "welcome back"
+    this.begin();
+  }
+
+  // Logged in to a community server: play with that account's save and other players.
+  startOnline(session, welcome) {
+    this.online = { session, server: welcome.server.name };
+    // Progress lives on the server now; the local solo save is left untouched.
+    this.save.backend = new ServerSaveBackend(session);
+    const data = welcome.save ?? {};
+    this.save.apply({
+      profile: { id: this.profile.id, name: welcome.name },
+      state: data.state ?? new PlayerState().toJSON(),
+      inventory: data.inventory ?? new Inventory().toJSON(),
+      journal: data.journal ?? new Journal().toJSON(),
+    });
+    this.metMarina = !!data.flags?.metMarina;
+    this.loadZone(data.player?.zone ?? 'sunny', data.player);
+    this.syncClock(welcome.serverTime);
+
+    this.chat = new Chat(
+      this.hudRoot,
+      (text) => session.send({ type: 'chat', text }),
+      () => this.started && !this.panels.isOpen && !this.dialog.isOpen && !this.connection?.isOpen,
+    );
+    this.playerList = new PlayerList(this.hudRoot);
+    this.connection = new ConnectionOverlay(this.hudRoot);
+    this.chat.add(null, `Connected to ${welcome.server.name}. Press T to chat, hold Tab to see who's here.`, { system: true });
+    if (welcome.server.motd) this.chat.add(null, welcome.server.motd, { system: true });
+
+    this.startMultiplayer(session, { server: true, roster: welcome.players });
+    session.on('disconnected', (reason) => this.connection.reconnecting(reason));
+    session.on('reconnected', (w) => {
+      this.connection.hide();
+      this.net.clear();
+      this.syncClock(w.serverTime);
+      this.chat.add(null, 'Reconnected!', { system: true });
+    });
+    session.on('ended', (reason) => this.connection.ended(reason));
+
+    this.pausePanel.setOnline({
+      server: welcome.server.name,
+      name: welcome.name,
+      onLeave: async () => {
+        await this.save.save();
+        session.close();
+        location.reload();
+      },
+    });
+
+    this.save.enabled = true;
+    this.save.save();
+    this.begin();
+  }
+
+  // Use the server's clock for time of day, so everyone's sunset matches.
+  syncClock(serverTime) {
+    if (serverTime) this.time.offset = (serverTime - Date.now()) / 1000 / HOUR_SECONDS;
+  }
+
+  // Swap zones instantly (no fade), e.g. when an online save starts somewhere else.
+  loadZone(zoneId, spot) {
+    const zone = ZONES_BY_ID[zoneId] ?? ZONES_BY_ID.sunny;
+    if (zone.id !== this.world.zone.id) {
+      this.fishing.reset();
+      this.world.dispose();
+      this.world = new World(this.scene, zone);
+      this.fishing.world = this.world;
+      this.hookWorld();
+    }
+    this.player.teleport(this.world, this.savedSpawn(spot));
+    this.cameraRig.snapTo(this.player.position);
+  }
+
+  begin() {
     this.started = true;
     this.hudRoot.classList.remove('pre-start');
     this.audio.start();
@@ -280,7 +376,8 @@ export class Game {
     const dt = Math.min(Math.max(this.timer.getDelta(), 0), 1 / 20);
 
     if (this.started) this.handleMenuKeys();
-    this.input.enabled = this.started && !this.panels.isOpen && !this.dialog.isOpen && !this.traveling;
+    this.input.enabled =
+      this.started && !this.panels.isOpen && !this.dialog.isOpen && !this.traveling && !this.chat?.isOpen && !this.connection?.isOpen;
     this.dialog.update(dt, this.input);
     this.hudRoot.classList.toggle('dialog-open', this.dialog.isOpen);
 
@@ -318,6 +415,11 @@ export class Game {
 
   handleMenuKeys() {
     const input = this.input;
+    if (this.chat?.isOpen) return; // the chat box handles its own keys
+    if (this.playerList) {
+      if (input.isDown('Tab') && !this.panels.isOpen) this.playerList.show(this.online.server, this.onlinePlayers());
+      else this.playerList.hide();
+    }
     if (input.wasPressed('Escape')) {
       if (this.dialog.isOpen) {
         this.afterDialog = null; // Esc skips whatever the dialogue would lead to
@@ -334,6 +436,11 @@ export class Game {
       this.state.cycleBait();
       this.audio.play('equip');
     }
+  }
+
+  onlinePlayers() {
+    const me = { name: this.profile.name, zone: this.world.zone.id, self: true };
+    return [me, ...[...this.net.roster.values()].map((p) => ({ ...p }))];
   }
 
   togglePanel(name) {

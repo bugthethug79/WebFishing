@@ -84,11 +84,18 @@ Each milestone should leave the game in a playable, polished state.
       player snapshots, transport-agnostic `Multiplayer` session, remote players with name tags
 - [x] `?lan` test mode linking tabs in one browser (see MULTIPLAYER.md)
 
-## Milestone 9: Online multiplayer (next)
-See [MULTIPLAYER.md](MULTIPLAYER.md) for the plan and the decisions needed first.
-- [ ] Choose hosting and build a WebSocket room server
-- [ ] Join flow (rooms / invite codes), player list
-- [ ] Remote catches shown in 3D, emotes, optional chat
+## ✅ Milestone 9: Community multiplayer (done)
+- [x] Self-hostable server: one Node.js file, no dependencies, config.json (public / private with passcode)
+- [x] Accounts per server (scrypt-hashed passwords, remember-me tokens), progress saved on the server
+- [x] Title screen: Play Solo or Multiplayer; server browser with live status, ping and 🔒 for private
+- [x] Chat (T) with speech bubbles, rate limits, blocked words; hold Tab for the player list
+- [x] Moderation: admins, /kick /ban, server console, one session per account
+- [x] Remote players see your bobber and the fish you hold up; server clock drives time + weather
+- [x] Automatic reconnect, clear errors (wrong passcode, full, banned, protocol mismatch)
+
+## Next ideas
+- [ ] Proximity voice chat (WebRTC, see MULTIPLAYER.md)
+- [ ] Emotes, trading, co-op events
 
 ## Later / maybe
 - [ ] Cloud saves / accounts
