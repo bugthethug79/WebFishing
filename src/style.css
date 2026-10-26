@@ -1,0 +1,67 @@
+@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap');
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #7fe0e8;
+  font-family: 'Fredoka', system-ui, sans-serif;
+  user-select: none;
+}
+
+#app, #app canvas { position: fixed; inset: 0; display: block; }
+
+#hud { position: fixed; inset: 0; pointer-events: none; color: #fff; }
+
+.hud-title {
+  position: absolute;
+  top: 18px;
+  left: 20px;
+  padding: 8px 16px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.85);
+  color: #2b6f8a;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  box-shadow: 0 4px 0 rgba(43, 111, 138, 0.25);
+}
+
+.hud-controls {
+  position: absolute;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 14px;
+  padding: 10px 16px;
+  border-radius: 14px;
+  background: rgba(20, 60, 80, 0.45);
+  backdrop-filter: blur(4px);
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: opacity 1.2s ease;
+}
+
+.hud-controls.faded { opacity: 0.25; }
+
+.hud-controls kbd {
+  display: inline-block;
+  min-width: 22px;
+  margin-right: 4px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: #fff;
+  color: #2b6f8a;
+  font: inherit;
+  font-weight: 700;
+  text-align: center;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.2);
+}
+
+@media (max-width: 640px) {
+  .hud-controls { flex-wrap: wrap; justify-content: center; white-space: normal; width: calc(100% - 32px); }
+}
